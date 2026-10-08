@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { TransportControls } from "./ModeControls";
+import { TransportControls, type PlaybackMode } from "./ModeControls";
 import "./AppDock.css";
 
 export interface AppDockProps {
@@ -13,7 +13,7 @@ export interface AppDockProps {
   /** Left-side readout (e.g. the Ch/Step/% group). */
   readout: ReactNode;
   /** Transport controls (passed straight to `TransportControls`). */
-  playbackPhase: "playing" | "paused";
+  mode: PlaybackMode;
   isPaused?: boolean;
   onTogglePause?: () => void;
   onFullscreen?: () => void;
@@ -37,7 +37,7 @@ export interface AppDockProps {
 export function AppDock({
   railPct,
   readout,
-  playbackPhase,
+  mode,
   isPaused,
   onTogglePause,
   onFullscreen,
@@ -52,7 +52,7 @@ export function AppDock({
       <div className="dock-row">
         <div className="dock-readout">{readout}</div>
         <TransportControls
-          playbackPhase={playbackPhase}
+          mode={mode}
           isPaused={isPaused}
           onTogglePause={onTogglePause}
           onFullscreen={onFullscreen}

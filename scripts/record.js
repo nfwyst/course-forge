@@ -18,7 +18,7 @@
 // 依赖: playwright (npx playwright install chromium)
 // ────────────────────────────────────────────────────────────────────
 import { chromium } from 'playwright';
-import { execSync, spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
@@ -112,6 +112,8 @@ const context = await browser.newContext({
 });
 
 const page = await context.newPage();
+const video = page.video();
+if (!video) throw new Error('Playwright video recording is unavailable');
 await page.goto(url, { waitUntil: 'networkidle' });
 console.log('  ▶ 录制开始...');
 
@@ -129,15 +131,21 @@ clearInterval(checkInterval);
 await context.close();
 await browser.close();
 
-// Find the recorded .webm file and convert to .mp4
-const videoDir = path.dirname(outFile);
-const files = fs.readdirSync(videoDir).filter(f => f.endsWith('.webm')).sort();
-const webm = files[files.length - 1]; // newest
-const webmPath = path.join(videoDir, webm);
+// Use the exact file owned by this page. Never scan the output directory:
+// it may contain older recordings that must not be converted or deleted.
+const webmPath = await video.path();
 
 if (outFile.endsWith('.mp4')) {
   console.log('  ⟳ 转换 webm → mp4 ...');
-  execSync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p "${outFile}" 2>/dev/null`, { stdio: 'inherit' });
+  const conversion = spawnSync('ffmpeg', [
+    '-y', '-i', webmPath,
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+    '-pix_fmt', 'yuv420p', outFile,
+  ], { stdio: 'inherit' });
+  if (conversion.error) throw conversion.error;
+  if (conversion.status !== 0) {
+    throw new Error(`ffmpeg exited with status ${conversion.status}`);
+  }
   fs.unlinkSync(webmPath);
   console.log(`  ✅ 录制完成: ${outFile}`);
 } else {

@@ -1,18 +1,9 @@
-import { useCallback } from "react";
 import "./ModeControls.css";
 
 export type PlaybackMode = "manual" | "audio" | "auto";
 
 export interface ModeControlsProps {
-  /**
-   * "playing" — the active step is currently playing audio (auto mode,
-   *   audio mode with autoplay, or audio mode with user-clicked resume).
-   *   Shows "AUTO 全自动" with a green pulse.
-   * "paused" — the active step is paused (user hit Space or auto mode
-   *   has not started yet). Shows "MANUAL 手动" with a neutral state.
-   */
-  playbackPhase: "playing" | "paused";
-  onModeChange: (m: PlaybackMode) => void;
+  mode: PlaybackMode;
   /** "space → start auto" hint text shown next to the button. */
   hint?: string;
   onFullscreen?: () => void;
@@ -33,11 +24,11 @@ export interface ModeControlsProps {
  * readout without the surrounding `.mc-bar` chrome.
  *
  * Layout order (left → right):
- *   ⏯ [Pause/Play]   ◉ [Status badge: AUTO or MANUAL]   ⛶ [Fullscreen]
+ *   ⏯ [Pause/Play]   ◉ [Mode status]   ⛶ [Fullscreen]
  *   hint text on the right
  */
 export interface TransportControlsProps {
-  playbackPhase: "playing" | "paused";
+  mode: PlaybackMode;
   onTogglePause?: () => void;
   isPaused?: boolean;
   onFullscreen?: () => void;
@@ -45,8 +36,27 @@ export interface TransportControlsProps {
   hint?: string;
 }
 
+function ModeStatus({ mode, isPaused }: { readonly mode: PlaybackMode; readonly isPaused?: boolean }) {
+  const status = isPaused ? "paused" : mode;
+  const labels = {
+    manual: ["MANUAL", "手动"],
+    audio: ["AUDIO", "音频"],
+    auto: ["AUTO", "全自动"],
+    paused: ["PAUSED", "暂停"],
+  } as const;
+  const [english, chinese] = labels[status];
+  return (
+    <div className={`mc-status mc-status--${status}`} aria-live="polite" aria-label={`播放模式：${chinese}`}>
+      {status === "auto" && <span className="mc-status-dot" aria-hidden="true" />}
+      {status === "paused" && <span className="mc-status-icon" aria-hidden="true">⏸</span>}
+      <span className="mc-status-en label-mono">{english}</span>
+      <span className="mc-status-cn serif-cn">{chinese}</span>
+    </div>
+  );
+}
+
 export function TransportControls({
-  playbackPhase,
+  mode,
   onTogglePause,
   isPaused,
   onFullscreen,
@@ -71,25 +81,7 @@ export function TransportControls({
         </button>
       )}
       <div className="mc-divider" aria-hidden="true" />
-      <div
-        className={`mc-status mc-status--${playbackPhase}`}
-        aria-live="polite"
-        aria-label={playbackPhase === "playing" ? "全自动播放中" : "手动暂停"}
-      >
-        {playbackPhase === "playing" ? (
-          <>
-            <span className="mc-status-dot" aria-hidden="true" />
-            <span className="mc-status-en label-mono">AUTO</span>
-            <span className="mc-status-cn serif-cn">全自动</span>
-          </>
-        ) : (
-          <>
-            <span className="mc-status-icon" aria-hidden="true">⏸</span>
-            <span className="mc-status-en label-mono">MANUAL</span>
-            <span className="mc-status-cn serif-cn">手动</span>
-          </>
-        )}
-      </div>
+      <ModeStatus mode={mode} isPaused={isPaused} />
       <div className="mc-divider" aria-hidden="true" />
       {onFullscreen && (
         <button
@@ -112,13 +104,9 @@ export function TransportControls({
 /**
  * ModeControls — compact playback transport (pause / fullscreen / state).
  *
- * The 3-state mode toggle (MANUAL / AUDIO / AUTO) has been collapsed
- * into a single status badge: it shows "AUTO 全自动" when audio is
- * playing, "MANUAL 手动" when paused. The user still controls state
- * via the Space key and the pause / play button. Switching between
- * internal modes is now hidden — pressing M on the keyboard still
- * cycles through the underlying modes, but the user doesn't see a
- * button for it.
+ * The 3-state mode toggle (MANUAL / AUDIO / AUTO) is a single truthful
+ * status badge. Pause is shown as PAUSED without changing the selected
+ * mode. Space controls pause/play; M cycles the underlying mode.
  *
  * This component is now a thin wrapper around `TransportControls`, kept
  * for the single-video mode footer (where it renders as its own bar).
@@ -126,28 +114,17 @@ export function TransportControls({
  * directly so the progress bar and the transport share one row.
  */
 export function ModeControls({
-  playbackPhase,
-  onModeChange: _onModeChange,
+  mode,
   hint,
   onFullscreen,
   isFullscreen,
   isPaused,
   onTogglePause,
 }: ModeControlsProps) {
-  const _set = useCallback(
-    (target: PlaybackMode) => () => _onModeChange(target),
-    [_onModeChange],
-  );
-  // Touching _set / _onModeChange so the linter doesn't strip them — the
-  // M key handler in App.tsx calls cycleMode() directly, but ModeControls
-  // historically received onModeChange. Keeping the prop keeps the API
-  // surface compatible for projects that want to surface the 3-state UI.
-  void _set;
-
   return (
     <div className="mc-bar">
       <TransportControls
-        playbackPhase={playbackPhase}
+        mode={mode}
         onTogglePause={onTogglePause}
         isPaused={isPaused}
         onFullscreen={onFullscreen}

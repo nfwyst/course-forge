@@ -41,17 +41,18 @@ EST_SRC_KBPS=200
 
 fmt_size() {
   local bytes=$1
-  if (( bytes >= 1073741824 )); then printf "%.1f GB" "$(awk "BEGIN{printf \"%.1f\",$bytes/1073741824}")"
-  elif (( bytes >= 1048576 ));  then printf "%.1f MB" "$(awk "BEGIN{printf \"%.1f\",$bytes/1048576}")"
-  elif (( bytes >= 1024 ));     then printf "%.0f KB" "$(awk "BEGIN{printf \"%.0f\",$bytes/1024}")"
+  if (( bytes >= 1073741824 )); then printf "%.1f GB" "$(awk -v n="$bytes" 'BEGIN { printf "%.1f", n / 1073741824; exit }' </dev/null)"
+  elif (( bytes >= 1048576 ));  then printf "%.1f MB" "$(awk -v n="$bytes" 'BEGIN { printf "%.1f", n / 1048576; exit }' </dev/null)"
+  elif (( bytes >= 1024 ));     then printf "%.0f KB" "$(awk -v n="$bytes" 'BEGIN { printf "%.0f", n / 1024; exit }' </dev/null)"
   else echo "${bytes} B"; fi
 }
 
 scan_audio() {
   local dir="$1" count size
   if [[ ! -d "$dir" ]]; then echo "0 0"; return; fi
-  count=$(find "$dir" -name '*.mp3' -type f 2>/dev/null | wc -l)
-  size=$(du -sb "$dir" 2>/dev/null | cut -f1)
+  count=$(find "$dir" -name '*.mp3' -type f 2>/dev/null | wc -l | tr -d ' ')
+  # `du -b` is GNU-only. `du -sk` is available on macOS and Linux.
+  size=$(du -sk "$dir" 2>/dev/null | awk '{ print $1 * 1024 }')
   echo "${count} ${size:-0}"
 }
 
@@ -159,9 +160,13 @@ fi
 
 # ── 执行压缩 ──────────────────────────────────────────────
 
-TMP_AUDIO_DIR="${AUDIO_DIR}.compressed"
-rm -rf "$TMP_AUDIO_DIR"
-mkdir -p "$TMP_AUDIO_DIR"
+AUDIO_PARENT=$(dirname "$AUDIO_DIR")
+AUDIO_NAME=$(basename "$AUDIO_DIR")
+TMP_AUDIO_DIR=$(mktemp -d "$AUDIO_PARENT/.${AUDIO_NAME}.compressed.XXXXXX")
+cleanup() {
+  rm -rf "$TMP_AUDIO_DIR"
+}
+trap cleanup EXIT
 
 echo "  ⟳ 开始压缩 ${total_count} 个文件..."
 echo ""
@@ -171,11 +176,11 @@ failed=0
 start_time=$(date +%s)
 
 while IFS= read -r src; do
-  rel="${src#$AUDIO_DIR/}"
+  rel="${src#"$AUDIO_DIR"/}"
   dst="$TMP_AUDIO_DIR/$rel"
   mkdir -p "$(dirname "$dst")"
 
-  if ffmpeg -y -i "$src" \
+  if ffmpeg -nostdin -y -i "$src" \
        -codec:a libmp3lame -b:a "${bitrate}k" \
        -ar "$sample_rate" -ac "$channels" \
        -loglevel error "$dst" 2>/dev/null; then
@@ -191,17 +196,22 @@ while IFS= read -r src; do
   fi
 done < <(find "$AUDIO_DIR" -name '*.mp3' -type f | sort)
 
-# ── 替换原目录 ────────────────────────────────────────────
+# ── 原位替换成功文件 ──────────────────────────────────────
 
-rm -rf "$AUDIO_DIR"
-mv "$TMP_AUDIO_DIR" "$AUDIO_DIR"
+# Keep subtitles, metadata, non-MP3 assets, and failed originals intact.
+# Every conversion finishes before the first source file is replaced.
+while IFS= read -r src; do
+  rel="${src#"$AUDIO_DIR"/}"
+  dst="$TMP_AUDIO_DIR/$rel"
+  [[ -f "$dst" ]] && mv "$dst" "$src"
+done < <(find "$AUDIO_DIR" -name '*.mp3' -type f | sort)
 
 end_time=$(date +%s)
 elapsed=$(( end_time - start_time ))
 
 # ── 结果汇报 ──────────────────────────────────────────────
 
-new_size=$(du -sb "$AUDIO_DIR" 2>/dev/null | cut -f1)
+new_size=$(du -sk "$AUDIO_DIR" 2>/dev/null | awk '{ print $1 * 1024 }')
 actual_saved=$(( 100 - new_size * 100 / total_size ))
 
 echo ""
@@ -215,4 +225,6 @@ printf "  节  省: %s (%.0f%%)\n" "$(fmt_size $(( total_size - new_size )))" "$
 echo "  耗  时: ${elapsed}s"
 echo ""
 echo "  音频已就绪在 $AUDIO_DIR/"
-[[ "$BACKUP" == true ]] && echo "  原文件备份: ${AUDIO_DIR}.backup/"
+if [[ "$BACKUP" == true ]]; then
+  echo "  原文件备份: ${AUDIO_DIR}.backup/"
+fi

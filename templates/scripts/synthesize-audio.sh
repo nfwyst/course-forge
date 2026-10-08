@@ -44,10 +44,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Use pwd -W so ROOT is a Windows-style path (e.g. E:/...). The TTS tools
-# (jq / edge-tts / ffmpeg) are native Windows .exes launched from Git-Bash
-# and cannot resolve MSYS paths like /e/workspace/...
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd -W)"
+# Git Bash needs a Windows path for native .exe tools. macOS, Linux and WSL
+# use the portable physical path; their `pwd` does not support `-W`.
+if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd -W)"
+else
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+fi
 SEGMENTS="$ROOT/audio-segments.json"
 OUT_DIR="$ROOT/public/audio"
 PROVIDERS_DIR="$SCRIPT_DIR/tts-providers"

@@ -13,7 +13,8 @@ const LABEL: Record<PlaybackMode, string> = {
 };
 
 /**
- * Hidden-on-hover playback mode toggle, fixed top-right.
+ * Optional legacy playback toggle. The default template does not mount it;
+ * App.tsx owns the M-key cycle and displays the current mode in the bottom dock.
  * Default opacity 0; hover the corner reveals it. Click cycles the mode.
  * `data-no-advance` so clicking the button doesn't advance the stage.
  */

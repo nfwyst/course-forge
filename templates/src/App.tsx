@@ -8,7 +8,7 @@ import { AutoStartGate } from "./components/AutoStartGate";
 import { ChapterMenu } from "./components/ChapterMenu";
 import { CourseProgressReadout, computeSegmentProgress } from "./components/CourseProgress";
 import { AppDock } from "./components/AppDock";
-import { ModeControls, type PlaybackMode } from "./components/ModeControls";
+import { ModeControls } from "./components/ModeControls";
 import { ProgressBar } from "./components/ProgressBar";
 import { QuizPanel } from "./components/QuizPanel";
 import { Stage } from "./components/Stage";
@@ -39,12 +39,6 @@ function estimateMs(text: string): number {
  * rename the call site.
  */
 export default function App() {
-  const [mode] = useState<PlaybackMode>(() => {
-    if (typeof window === "undefined") return "manual";
-    return (window.localStorage.getItem("cf-mode") as PlaybackMode | null) || "manual";
-  });
-  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(mode);
-
   // Course mode is the default — read the chapter list from course.json.
   // To force single-video mode, pass `mode: "single"` here and the
   // local `CHAPTERS` array will be used instead.
@@ -63,6 +57,20 @@ export default function App() {
     );
   }
 
+  if (loader.status === "empty") {
+    return (
+      <div className="app-root app-root--loading">
+        <div className="app-error">
+          <div className="app-error-title serif-cn">开始创建第一章</div>
+          <div className="app-error-body serif-cn">{loader.message}</div>
+          <div className="app-error-hint label-mono">
+            创建章节文件，在 chapters.ts 注册，再把相同 id 加入 course.json。
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loader.status === "missing" || loader.status === "error") {
     return (
       <div className="app-root app-root--loading">
@@ -77,14 +85,7 @@ export default function App() {
     );
   }
 
-  return (
-    <CourseView
-      course={loader.course}
-      chapters={loader.chapters}
-      playbackMode={playbackMode}
-      onModeChange={setPlaybackMode}
-    />
-  );
+  return <CourseView course={loader.course} chapters={loader.chapters} />;
 }
 
 /* ========================================================================
@@ -95,17 +96,15 @@ export default function App() {
 interface CourseViewProps {
   course: import("./registry/types").CourseJson;
   chapters: import("./registry/types").ChapterDef[];
-  playbackMode: PlaybackMode;
-  onModeChange: (m: PlaybackMode) => void;
 }
 
-function CourseView({ course, chapters, playbackMode, onModeChange }: CourseViewProps) {
+function CourseView({ course, chapters }: CourseViewProps) {
   // Key the stepper by the loaded courseId so two courses served from
   // the same origin keep independent progress (per the SKILL note on
   // storageKey naming).
   const courseId = `${course.courseId}-${readCourseIdFromUrl()}`;
   const stepper = useStepper(chapters, courseId);
-  const { mode, autoStarted, setAutoStarted } = useAutoMode();
+  const { mode, cycleMode, autoStarted, setAutoStarted } = useAutoMode();
 
   const ch = chapters[stepper.cursor.chapter]!;
   const Cmp = ch.Component;
@@ -127,15 +126,6 @@ function CourseView({ course, chapters, playbackMode, onModeChange }: CourseView
   // Tracks whether the active quiz (if any) has been submitted. While a
   // quiz is open and unanswered, advancement is held (manual + auto).
   const [quizAnswered, setQuizAnswered] = useState(false);
-
-  // Persist mode choice
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("cf-mode", playbackMode);
-    } catch {
-      /* ignore */
-    }
-  }, [playbackMode]);
 
   // Reset pause / quiz state when the cursor changes (new step = fresh play)
   useEffect(() => {
@@ -307,6 +297,9 @@ function CourseView({ course, chapters, playbackMode, onModeChange }: CourseView
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         toggleFullscreen();
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        cycleMode();
       }
     };
     // Use capture phase so we run BEFORE any focused-element default
@@ -315,7 +308,7 @@ function CourseView({ course, chapters, playbackMode, onModeChange }: CourseView
     // is the single source of truth for Space.
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [togglePause, toggleFullscreen, mode, autoStarted, setAutoStarted]);
+  }, [togglePause, toggleFullscreen, cycleMode, mode, autoStarted, setAutoStarted]);
 
   return (
     <div
@@ -381,30 +374,30 @@ function CourseView({ course, chapters, playbackMode, onModeChange }: CourseView
                 course={course}
               />
             }
-            playbackPhase={isPaused ? "paused" : "playing"}
+            mode={mode}
             isPaused={isPaused}
             onTogglePause={togglePause}
             onFullscreen={toggleFullscreen}
             isFullscreen={isFs}
-            hint="Space 暂停/播放 · F 全屏 · 鼠标点屏幕推进"
+            hint="Space 暂停/播放 · M 模式 · F 全屏 · 鼠标点屏幕推进"
           />
         )}
 
         {course.courseId === "single" && (
           <ModeControls
-            playbackPhase={isPaused ? "paused" : "playing"}
-            onModeChange={onModeChange}
+            mode={mode}
             onFullscreen={toggleFullscreen}
             isFullscreen={isFs}
             isPaused={isPaused}
             onTogglePause={togglePause}
-            hint="Space 暂停/播放 · F 全屏 · 鼠标点屏幕推进"
+            hint="Space 暂停/播放 · M 模式 · F 全屏 · 鼠标点屏幕推进"
           />
         )}
 
         {quiz && (
           <div className="app-quiz-overlay">
             <QuizPanel
+              key={quiz.question.id}
               question={quiz.question}
               onSubmit={() => setQuizAnswered(true)}
             />

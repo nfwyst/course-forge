@@ -4,7 +4,7 @@
 > 需要**分工并行**时，把"写口播稿"升级为一条**文档驱动、可子代理并行**的前置流水线 ——
 > 先立项、再**逐课**写"剧本"（每节课交给 1 个子代理写全部小节）、最后主代理按剧本设计画面。
 >
-> 短视频（每章 30~60s）的小课仍可走 [`SKILL.md`](SKILL.md) 的 inline `script.md` + `outline.md`
+> 短视频（每章 30~60s）的小课仍可走 [`SKILL.md`](../SKILL.md) 的 inline `script.md` + `outline.md`
 > 路径；**本文件是"大课 / 需分工"时的精化工作流**，两者共用同一套术语与 5 层模型
 > （见 [`COURSE-STRUCTURE.md`](COURSE-STRUCTURE.md)）。
 
@@ -75,7 +75,7 @@ Phase 2  画面设计（主代理，按剧本逐小节实现 TSX）
 ```
 
 > 短视频小课可跳过 Phase 0/1 的拆子代理，直接用 inline `script.md` + `outline.md`（见
-> [`SKILL.md` Phase 1](SKILL.md)）；本文件是"大课 / 需分工"时的精化。
+> [`SKILL.md` Phase 1](../SKILL.md)）；本文件是"大课 / 需分工"时的精化。
 
 ---
 
@@ -237,7 +237,7 @@ brief.md 写完后**必须停，让用户确认**。确认后把它当作冻结�
 
 ## 8. 与现有 `script.md` / `outline.md` 的关系
 
-- **短视频小课**：仍用 [`SKILL.md`](SKILL.md) 的 inline `script.md`（整课口播）+ `outline.md`（开发计划，禁写动画）。
+- **短视频小课**：仍用 [`SKILL.md`](../SKILL.md) 的 inline `script.md`（整课口播）+ `outline.md`（开发计划，禁写动画）。
 - **长课 / 需分工**：用本文件的 `brief.md` + `script/NN-id.md`（逐课剧本，每课 1 子代理写全部小节）+ `course-bible.md` 取代之。
   `outline.md` 可降为"高层计划"并入 `brief.md`，不再单独维护整课 script。
 - 两者共用 § 2 速率公式、§ 1 术语、5 层模型、5 条硬规则 —— **内核约束不变，只是外壳升级**。

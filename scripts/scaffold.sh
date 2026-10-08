@@ -194,22 +194,13 @@ p.scripts = Object.assign({}, p.scripts, {
 fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
 '
 
-# 生成一份可用的 course.json —— useCourseLoader 静态 import ../../course.json，
-# 缺它 tsc 与运行都会直接报 "course.json 缺失"。开发者按自己的章节改写即可。
+# 生成空的 course.json —— useCourseLoader 静态 import ../../course.json，
+# 缺它 tsc 会失败。章节必须先在 chapters.ts 注册，再加入此文件。
 cat > course.json <<'JSON'
 {
-  "courseId": "demo",
-  "title": "示例课程（Demo）",
-  "outlineSegments": [
-    {
-      "id": "seg-demo",
-      "title": "示例分段",
-      "chapters": [
-        { "id": "example", "title": "示例章节" },
-        { "id": "ide", "title": "工程师工作台" }
-      ]
-    }
-  ]
+  "courseId": "course",
+  "title": "待命名课程",
+  "outlineSegments": []
 }
 JSON
 
@@ -239,7 +230,7 @@ cat <<EOF
 然后：
 
   • 点舞台任意位置推进全局 step 计数器。
-  • 鼠标移到底部边缘可显出进度条；鼠标移到右上角可显出播放模式切换。
+  • 底部状态徽章显示当前播放模式；按 M 键循环 MANUAL / AUDIO / AUTO。
   • 在 src/chapters/ 下创建你自己的章节（mkdir src/chapters/01-<id>）
     （流程见 SKILL.md "Phase 2.4 实现单章" —— 每章一次到位完整版本，
      不分骨架 / 精修两步；视觉设计按 CHAPTER-CRAFT.md 四大支柱）。
@@ -249,7 +240,7 @@ cat <<EOF
   • **每章必须有 narrations.ts**（与章节 .tsx 同目录），
     数组长度 = step 数，是音频合成 + Auto 模式的唯一真相源。
   • 章节改了就 bump src/hooks/useStepper.ts 的 STORAGE_KEY 末尾版本号。
-  • 每写完一章跑 `npm run lint` —— 校验 5 条硬规则（视觉演示 / 互动密度 /
+  • 每写完一章跑 \`npm run lint\` —— 校验 5 条硬规则（视觉演示 / 互动密度 /
     逐步揭示 / 口播对齐），静态拦截反模式。
 
 录制：

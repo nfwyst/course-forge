@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # ────────────────────────────────────────────────────────────────────
 # OpenAI TTS provider — uses the Audio Speech REST API via curl.
 #

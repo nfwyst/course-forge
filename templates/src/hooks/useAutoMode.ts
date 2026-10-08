@@ -46,13 +46,7 @@ export function useAutoMode() {
     setMode(ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length]!);
   }, [mode, setMode]);
 
-  // NOTE: The M (cycle mode) and Space (start auto) keyboard shortcuts
-// were originally wired here. They were REMOVED from this hook because
-// they conflicted with the parent <App>'s own Space handler — two
-// listeners both firing caused Space to both pause and advance, and
-// paused state to flicker. The parent now owns ALL keyboard shortcuts
-// (M / F / Space) so there is one source of truth. See App.tsx
-// `useEffect` for the keydown handler.
+  // App owns the single keyboard listener and calls this hook's actions.
 
   return { mode, setMode, cycleMode, autoStarted, setAutoStarted };
 }

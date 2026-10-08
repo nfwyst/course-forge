@@ -31,6 +31,7 @@ import defaultCourseJson from "../../course.json";
 export type CourseLoadState =
   | { status: "loading" }
   | { status: "ok"; course: CourseJson; chapters: ChapterDef[]; flatChapterIds: string[] }
+  | { status: "empty"; message: string }
   | { status: "missing"; message: string }
   | { status: "error"; message: string };
 
@@ -105,48 +106,40 @@ export function useCourseLoader({
   mode,
   singleVideoChapters,
 }: UseCourseLoaderOptions): CourseLoadState {
-  return useMemo<CourseLoadState>(() => {
-    if (mode === "single") {
-      return {
-        status: "ok",
-        course: {
-          courseId: "single",
-          title: "Single Video",
-          outlineSegments: [
-            {
-              id: "single",
-              title: "Single Video",
-              chapters: singleVideoChapters.map((c) => ({ id: c.id, title: c.title })),
-            },
-          ],
-        },
-        chapters: singleVideoChapters,
-        flatChapterIds: singleVideoChapters.map((c) => c.id),
-      };
-    }
+  return useMemo(() => loadCourse(mode, singleVideoChapters), [mode, singleVideoChapters]);
+}
 
-    // Course mode: resolve the courseId from URL and look it up in the
-    // eager-imported map. No network fetch, no public/ copy.
-    const courseId = readCourseIdFromUrl();
-    const course = findCourseById(courseId);
-    if (!course) {
-      const available = Object.keys(allCourses)
-        .map((p) => p.match(/course-([^/]+)\.json$/)?.[1])
-        .filter((x): x is string => Boolean(x));
-      return {
-        status: "missing",
-        message: `未找到 ?course=${courseId}。可用的课程: ${
-          available.length ? available.join(", ") : "(仅默认 course.json)"
-        }`,
-      };
-    }
-    const { matched, flatIds, missing } = findChapters(course, singleVideoChapters);
-    if (missing.length > 0) {
-      return {
-        status: "error",
-        message: `course.json 引用了未注册的章节 id: ${missing.join(", ")}`,
-      };
-    }
-    return { status: "ok", course, chapters: matched, flatChapterIds: flatIds };
-  }, [mode, singleVideoChapters]);
+function loadCourse(mode: UseCourseLoaderOptions["mode"], chapters: ChapterDef[]): CourseLoadState {
+  if (mode === "single") return singleCourse(chapters);
+  const courseId = readCourseIdFromUrl();
+  const course = findCourseById(courseId);
+  if (!course) return missingCourse(courseId);
+  const { matched, flatIds, missing } = findChapters(course, chapters);
+  if (flatIds.length === 0) {
+    return { status: "empty", message: "course.json 尚未添加章节；请先创建并注册第一章。" };
+  }
+  if (missing.length > 0) {
+    return { status: "error", message: `course.json 引用了未注册的章节 id: ${missing.join(", ")}` };
+  }
+  return { status: "ok", course, chapters: matched, flatChapterIds: flatIds };
+}
+
+function singleCourse(chapters: ChapterDef[]): CourseLoadState {
+  const refs = chapters.map((chapter) => ({ id: chapter.id, title: chapter.title }));
+  return {
+    status: "ok",
+    course: { courseId: "single", title: "Single Video", outlineSegments: [{ id: "single", title: "Single Video", chapters: refs }] },
+    chapters,
+    flatChapterIds: chapters.map((chapter) => chapter.id),
+  };
+}
+
+function missingCourse(courseId: string): CourseLoadState {
+  const available = Object.keys(allCourses)
+    .map((path) => path.match(/course-([^/]+)\.json$/)?.[1])
+    .filter((id): id is string => Boolean(id));
+  return {
+    status: "missing",
+    message: `未找到 ?course=${courseId}。可用的课程: ${available.length ? available.join(", ") : "(仅默认 course.json)"}`,
+  };
 }

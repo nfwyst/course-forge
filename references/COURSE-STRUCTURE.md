@@ -128,7 +128,7 @@
 - **键盘单一权威**：`App.tsx` 是唯一 Space 监听者（capture 阶段 + `stopPropagation`），`AutoStartGate` / `useAutoMode` 不各自监听，避免双触发。
 - **AutoStartGate 不加 `role="button" tabIndex`**：只做 div，Space 全归 App.tsx 按 `gateVisible` 决定行为。
 - **chrome 用 `--ui-*` token，不用主题 token**：`--accent` 等是给内容服务的，chrome 直接用会「夺戏」；`base.css` 已做 `--ui-*` 映射（见 `THEMES.md` § 通用 UI Token）。
-- **ModeControls 不要 3 按钮**：只放 1 个不可点的状态徽章（播放中 / 暂停中），M 键循环 mode 不暴露给 UI。
+- **ModeControls 不要 3 按钮**：只放 1 个不可点的状态徽章，准确显示 MANUAL / AUDIO / AUTO；暂停时显示 PAUSED。M 键循环 mode，不额外占用按钮空间。
 
 ---
 
