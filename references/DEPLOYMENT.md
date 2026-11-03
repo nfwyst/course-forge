@@ -24,19 +24,11 @@
 
 ```bash
 # 构建
-cd presentation && npm run build     # 产出 dist/
+cd presentation && bun run build     # 产出 dist/
 
-# Vercel 部署（一行）
-npx vercel --prod
-
-# Netlify
-npx netlify deploy --prod --dir=dist
-
-# Cloudflare Pages
-npx wrangler pages deploy dist
-
-# GitHub Pages：把 dist/ 推到 gh-pages 分支
-# Nginx: 拷 dist/ 到 /var/www，配置 server block
+# 使用已安装且由团队固定版本的托管平台 CLI 部署。
+# GitHub Pages：把 dist/ 推到 gh-pages 分支。
+# Nginx：拷 dist/ 到 /var/www，配置 server block。
 ```
 
 **Nginx 最小配置**：
@@ -107,12 +99,9 @@ import CourseApp from './courses/my-course/dist/assets/index.js';
 ## 方案 5：PWA / 离线
 
 ```bash
-cd presentation
-npm install -D vite-plugin-pwa
-# 在 vite.config.ts 加 VitePWA 插件
-# 配置 manifest + service worker
-npm run build   # dist/ 含 sw.js
-# dist/ 可直接 file:// 访问（但部分功能受限于 file:// origin）
+PWA 需要引入额外构建依赖。先在独立变更中评估、固定准确版本并更新
+`package.json` 与 lockfile；不要在脚手架运行时安装可变版本。完成后运行
+`bun run build`，确认 `dist/` 包含 service worker。
 ```
 
 **坑**：
@@ -172,7 +161,7 @@ aws cloudfront create-invalidation --distribution-id E123 --paths "/*"
 3. **CORS**：跨域 fetch 需要 `Access-Control-Allow-Origin`
 4. **缓存头**：课件内容可设 `Cache-Control: public, max-age=31536000, immutable`
 5. **录像模式 `?auto=1`**：只在用户录屏时打开，**不要**给普通用户用（无音频自动跳转错位）
-6. **首屏空白**：vite 默认 `index.html` 在 `dist/`，直接 `npx serve dist` 验证
+6. **首屏空白**：vite 默认 `index.html` 在 `dist/`，用 `bun run preview` 验证
 
 ---
 

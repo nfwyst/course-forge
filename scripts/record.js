@@ -1,158 +1,155 @@
-#!/usr/bin/env node
-// ────────────────────────────────────────────────────────────────────
-// record.js — 用 Playwright 录制课件画布为 MP4 视频
-//
-// 用法:
-//   node scripts/record.js                          # 交互式录制
-//   node scripts/record.js --headless                # 无头模式
-//   node scripts/record.js --out my-video.mp4        # 指定输出文件
-//   node scripts/record.js --chapter 10              # 从指定章节开始
-//   node scripts/record.js --dev                     # 使用 dev server
-//   node scripts/record.js --duration 120            # 录制时长(秒)
-//   node scripts/record.js --url "http://..."        # 指定 URL
-//
-// 环境变量:
-//   RECORD_URL      课件页面 URL (覆盖 --dev)
-//   RECORD_DURATION 录制时长秒数
-//
-// 依赖: playwright (npx playwright install chromium)
-// ────────────────────────────────────────────────────────────────────
-import { chromium } from 'playwright';
-import { spawn, spawnSync } from 'child_process';
-import path from 'path';
-import fs from 'fs';
+#!/usr/bin/env bun
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, renameSync, statSync, unlinkSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const args = process.argv.slice(2);
-let headless = false;
-let outFile = path.join(process.cwd(), 'course-recording.mp4');
-let chapter = 0;
-let devMode = false;
-let duration = 0;
-let resolution = '1920x1080';
-let url = '';
+const DEFAULT_PORT = 5174;
+const DEFAULT_DURATION_SECONDS = 300;
 
-for (let i = 0; i < args.length; i++) {
-  switch (args[i]) {
-    case '--headless': headless = true; break;
-    case '--out': outFile = args[++i]; break;
-    case '--chapter': chapter = parseInt(args[++i]) || 0; break;
-    case '--dev': devMode = true; break;
-    case '--duration': duration = parseInt(args[++i]) || 0; break;
-    case '--resolution': resolution = args[++i]; break;
-    case '--url': url = args[++i]; break;
-    case '-h': case '--help':
-      console.log('用法: node scripts/record.js [选项]');
-      console.log('  --headless     无头模式');
-      console.log('  --out FILE      输出文件 (默认 ./course-recording.mp4)');
-      console.log('  --chapter N     从第 N 章开始 (默认 0)');
-      console.log('  --dev           使用 dev server (localhost:5173)');
-      console.log('  --duration SECS 录制时长秒数');
-      console.log('  --url URL       课件页面 URL (覆盖 --dev)');
-      console.log('  --resolution WxH 录制分辨率 (默认 1920x1080)');
-      process.exit(0);
-  }
-}
-
-// ── 确定 URL ──────────────────────────────────────────────────────
-if (url) {
-  // use as-is
-} else if (process.env.RECORD_URL) {
-  url = process.env.RECORD_URL;
-} else if (devMode) {
-  url = `http://localhost:5173/?auto=1&recording=1&chapter=${chapter}`;
-  // Start dev server if needed
-  try {
-    const resp = await fetch(url);
-    if (resp.status !== 200) throw new Error('not ready');
-  } catch {
-    console.log('  dev server 未运行，正在启动...');
-    const cwd = path.resolve(import.meta.dirname, '..');
-    const dev = spawn('npm', ['run', 'dev'], { cwd, stdio: 'pipe', detached: false });
-    dev.stderr.on('data', d => {
-      if (d.toString().includes('Local:')) console.log('  ✓ dev server 已就绪');
-    });
-    // Wait for server
-    for (let i = 0; i < 30; i++) {
-      try {
-        const r = await fetch(url);
-        if (r.status === 200) break;
-      } catch {}
-      await new Promise(r => setTimeout(r, 1000));
-    }
-  }
-} else {
-  console.error('✗ 未指定 URL。使用 --dev 或 --url');
+function fail(message) {
+  console.error(`✗ ${message}`);
   process.exit(1);
 }
 
-// ── 确定时长 ──────────────────────────────────────────────────────
-if (!duration) {
-  duration = parseInt(process.env.RECORD_DURATION || '0') || 300;
-}
-
-const [w, h] = resolution.split('x').map(Number);
-
-console.log('╔═══════════════════════════════════════════════════════════╗');
-console.log('║  Course Recording (Playwright)');
-console.log(`║  URL: ${url}`);
-console.log(`║  Output: ${outFile}`);
-console.log(`║  Resolution: ${w}×${h}`);
-console.log(`║  Duration: ${duration}s`);
-console.log(`║  Mode: ${headless ? 'headless' : 'visible'}`);
-console.log('╚═══════════════════════════════════════════════════════════╝');
-
-// ── 录制 ──────────────────────────────────────────────────────────
-const browser = await chromium.launch({ headless });
-const context = await browser.newContext({
-  viewport: { width: w, height: h },
-  recordVideo: {
-    dir: path.dirname(outFile),
-    size: { width: w, height: h },
-  },
-});
-
-const page = await context.newPage();
-const video = page.video();
-if (!video) throw new Error('Playwright video recording is unavailable');
-await page.goto(url, { waitUntil: 'networkidle' });
-console.log('  ▶ 录制开始...');
-
-// Wait for duration
-const start = Date.now();
-const checkInterval = setInterval(() => {
-  const elapsed = Math.round((Date.now() - start) / 1000);
-  if (elapsed % 30 === 0) console.log(`  ... ${elapsed}s / ${duration}s`);
-}, 30000);
-
-await new Promise(r => setTimeout(r, duration * 1000));
-clearInterval(checkInterval);
-
-// Close → video saved
-await context.close();
-await browser.close();
-
-// Use the exact file owned by this page. Never scan the output directory:
-// it may contain older recordings that must not be converted or deleted.
-const webmPath = await video.path();
-
-if (outFile.endsWith('.mp4')) {
-  console.log('  ⟳ 转换 webm → mp4 ...');
-  const conversion = spawnSync('ffmpeg', [
-    '-y', '-i', webmPath,
-    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-    '-pix_fmt', 'yuv420p', outFile,
-  ], { stdio: 'inherit' });
-  if (conversion.error) throw conversion.error;
-  if (conversion.status !== 0) {
-    throw new Error(`ffmpeg exited with status ${conversion.status}`);
+function parseArgs(args) {
+  const options = {
+    chapter: 0,
+    dev: false,
+    duration: undefined,
+    headless: false,
+    outFile: join(process.cwd(), "course-recording.mp4"),
+    resolution: "1920x1080",
+    url: "",
+  };
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--headless") options.headless = true;
+    else if (argument === "--dev") options.dev = true;
+    else if (argument === "--out") options.outFile = args[++index] ?? fail("--out needs a file path");
+    else if (argument === "--chapter") options.chapter = Number.parseInt(args[++index] ?? "", 10);
+    else if (argument === "--duration") options.duration = Number.parseInt(args[++index] ?? "", 10);
+    else if (argument === "--resolution") options.resolution = args[++index] ?? fail("--resolution needs WIDTHxHEIGHT");
+    else if (argument === "--url") options.url = args[++index] ?? fail("--url needs an address");
+    else if (argument === "-h" || argument === "--help") {
+      console.log("Usage: bun run record -- [options]");
+      console.log("  --dev                 start the local Vite server on 127.0.0.1:5174");
+      console.log("  --url URL             record an existing course URL");
+      console.log("  --out FILE            output .mp4 or .webm file (default: course-recording.mp4)");
+      console.log("  --headless            run Chromium without a visible window");
+      console.log("  --duration SECONDS    recording duration (default: 300; 0 is a smoke run)");
+      console.log("  --resolution WIDTHxHEIGHT (default: 1920x1080)");
+      process.exit(0);
+    } else fail(`unknown option: ${argument}`);
   }
-  fs.unlinkSync(webmPath);
-  console.log(`  ✅ 录制完成: ${outFile}`);
-} else {
-  fs.renameSync(webmPath, outFile);
-  console.log(`  ✅ 录制完成: ${outFile}`);
+  if (!Number.isInteger(options.chapter) || options.chapter < 0) fail("--chapter must be a non-negative integer");
+  if (options.duration !== undefined && (!Number.isInteger(options.duration) || options.duration < 0)) {
+    fail("--duration must be a non-negative integer");
+  }
+  const resolution = options.resolution.match(/^(\d+)x(\d+)$/);
+  if (!resolution) fail("--resolution must use WIDTHxHEIGHT");
+  return { ...options, height: Number(resolution[2]), width: Number(resolution[1]) };
 }
 
-const size = (fs.statSync(outFile).size / 1024 / 1024).toFixed(1);
-console.log(`  🎬 文件大小: ${size} MB`);
-console.log(`  ⏱  时长: ${duration}s`);
+function runningUrl(options) {
+  if (options.url) return options.url;
+  if (process.env.RECORD_URL) return process.env.RECORD_URL;
+  if (!options.dev) fail("pass --dev or --url");
+  return `http://127.0.0.1:${DEFAULT_PORT}/?auto=1&recording=1&chapter=${options.chapter}`;
+}
+
+async function urlResponds(url) {
+  try {
+    const response = await fetch(url);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function startDevServer(url) {
+  const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+  const child = spawn(process.execPath, ["run", "dev"], {
+    cwd: resolve(scriptDirectory, ".."),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output = [child.stdout, child.stderr];
+  return new Promise((resolveReady, rejectReady) => {
+    const deadline = setTimeout(() => rejectReady(new Error(`Vite did not start for ${url}`)), 15_000);
+    const finish = (error) => {
+      clearTimeout(deadline);
+      child.stdout.removeAllListeners("data");
+      child.stderr.removeAllListeners("data");
+      child.removeAllListeners("error");
+      child.removeAllListeners("exit");
+      error ? rejectReady(error) : resolveReady(child);
+    };
+    child.once("error", finish);
+    child.once("exit", (code) => finish(new Error(`Vite exited before recording (status ${code ?? "signal"})`)));
+    for (const stream of output) {
+      stream.on("data", (chunk) => {
+        if (chunk.toString().includes(`http://127.0.0.1:${DEFAULT_PORT}/`)) finish();
+      });
+    }
+  });
+}
+
+async function stopServer(server) {
+  if (!server || server.exitCode !== null) return;
+  server.kill("SIGTERM");
+  await new Promise((resolveStopped) => server.once("exit", resolveStopped));
+}
+
+function convertVideo(webmPath, outFile) {
+  if (!outFile.endsWith(".mp4")) {
+    renameSync(webmPath, outFile);
+    return;
+  }
+  const conversion = spawnSync("ffmpeg", [
+    "-y", "-i", webmPath,
+    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+    "-pix_fmt", "yuv420p", outFile,
+  ], { stdio: "inherit" });
+  if (conversion.error) throw conversion.error;
+  if (conversion.status !== 0) throw new Error(`ffmpeg exited with status ${conversion.status}`);
+  unlinkSync(webmPath);
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const url = runningUrl(options);
+  let server;
+  try {
+    if (options.dev && !(await urlResponds(url))) server = await startDevServer(url);
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: options.headless });
+    const context = await browser.newContext({
+      viewport: { width: options.width, height: options.height },
+      recordVideo: { dir: dirname(options.outFile), size: { width: options.width, height: options.height } },
+    });
+    try {
+      const page = await context.newPage();
+      const video = page.video();
+      if (!video) throw new Error("Playwright video recording is unavailable");
+      await page.goto(url, { waitUntil: "networkidle" });
+      const autoGate = page.locator(".auto-gate");
+      if (await autoGate.isVisible()) {
+        await autoGate.click();
+        await autoGate.waitFor({ state: "hidden" });
+      }
+      if (options.duration !== 0) {
+        await new Promise((resolveRecorded) => setTimeout(resolveRecorded, (options.duration ?? DEFAULT_DURATION_SECONDS) * 1000));
+      }
+      await context.close();
+      convertVideo(await video.path(), options.outFile);
+      if (!existsSync(options.outFile)) throw new Error(`recording was not written: ${options.outFile}`);
+      console.log(`✓ recording complete: ${options.outFile} (${(statSync(options.outFile).size / 1024 / 1024).toFixed(1)} MB)`);
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await stopServer(server);
+  }
+}
+
+main().catch((error) => fail(error instanceof Error ? error.message : String(error)));

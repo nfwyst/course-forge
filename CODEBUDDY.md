@@ -48,8 +48,8 @@ course-forge/
 │   └── tts-providers/        #   Pluggable TTS backends (minimax.sh, openai.sh, README.md contract)
 ├── templates/
 │   ├── index.html
-│   ├── vite.config.ts        #   Port 5174, fs.allow [".."]
-│   └── presentation/src/
+│   ├── vite.config.ts        #   Port 5174, project-root access only
+│   └── src/
 │       ├── chapters/             #   章节目录（不带示例，从零创建）
 │       ├── components/             #   Reusable building blocks
 │       ├── hooks/                  #   useStepper, useAudioPlayer, useStageScale, useAutoMode
@@ -88,8 +88,8 @@ Phase 3 — Audio & subtitles (optional)
   3.3  Compress to 64kbps (50% size reduction)
   3.4  Generate subtitle timing (subtitle-timing.py, 60-char chunks, 300ms/char)
 Phase 4 — Deploy / record
-  4.1  npm run build → dist/ (static)
-  4.2  Preview with `npx serve dist`
+  4.1  bun run build → dist/ (static)
+  4.2  Preview with `bun run preview`
   4.3a Embed (new-tab / iframe / DB-driven)  OR  4.3b Auto-record (bash scripts/record.sh → ?auto=1)
 ```
 
@@ -103,7 +103,7 @@ Phase 4 — Deploy / record
 ## Operating conventions (how the agent develops with this skill)
 
 - **逐节开发是默认流程**：除非用户明确要求「多节」或「全部」，每次只开发 / 渲染 / 验证**一个小节**（= 二级章节）。用户显式点名多个小节（如「开发 01 和 02」）才是多节请求，才一次性做多个。这样改动范围小、易审查、可逐步回滚。
-- **每次 skill 优化必须落地到 skill 目录文件（即可调用目录），不能只停留在对话上下文**：course-forge 的「可调用目录」就是本仓库 `E:/workspace/course-forge`（WorkBuddy 从这里加载 `SKILL.md` / `references/` / `templates/`）。任何对玩法、术语、脚本、模板的修改都要**直接写入对应文件**，不能只留在对话里——否则会话上下文溢出后，新代理读到的还是旧版 skill。`templates/` 与 `demo/` 里若有同一脚本的引用副本（如 `extract-narrations.ts`、`subtitle-timing.py`），改一处要同步另一处。
+- **每次 skill 优化必须落地到 skill 目录文件（即可调用目录），不能只停留在对话上下文**：course-forge 的「可调用目录」就是当前 skill 根目录（从这里加载 `SKILL.md` / `references/` / `templates/`）。任何对玩法、术语、脚本、模板的修改都要**直接写入对应文件**，不能只留在对话里——否则会话上下文溢出后，新代理读到的还是旧版 skill。`templates/` 与 `demo/` 里若有同一脚本的引用副本（如 `extract-narrations.ts`、`subtitle-timing.py`），改一处要同步另一处。
 - **验证用 demo，不污染 skill 源**：端到端验证产物放 `demo/`（已在 `.gitignore`），不要放进 `course-forge/` 根目录。
 
 ## Commands commonly used in this repo
@@ -135,14 +135,14 @@ cp themes/<new-id>/tokens.css my-course/src/styles/tokens.css
 ### Inside a scaffolded project (`my-course/`)
 
 ```bash
-npm install
-npm run dev               # http://localhost:5174
-npm run build             # → dist/  (static, deploy anywhere)
-npx tsc --noEmit          # type-check only
+bun install --frozen-lockfile
+bun run dev               # http://127.0.0.1:5174
+bun run build             # → dist/  (static, deploy anywhere)
+bun run check             # type-check only
 
 # Audio pipeline (after chapters + narrations.ts are written)
-npm run extract-narrations              # → audio-segments.json (review before synthesizing)
-source .env && npm run synthesize-audio # TTS via current provider
+bun run extract-narrations              # → audio-segments.json (review before synthesizing)
+source .env && bun run synthesize-audio # TTS via current provider
 python3 scripts/subtitle-timing.py      # → public/subtitle-timing.json
 
 # Validate / fix course.json (NEVER hand-edit JSON; always run this script)

@@ -23,10 +23,7 @@ Output is a static `dist/` — deployable anywhere.
 ## Install
 
 ```bash
-# Recommended (OpenCode-style registry) — skills CLI
-npx skills add xmwengxing/course-forge
-
-# Or — manual clone (works for any runtime)
+# Manual clone (works for any runtime)
 git clone https://github.com/xmwengxing/course-forge.git
 #  OpenCode / Claude Code / Cursor / Codex:
 cp -r course-forge /your-project/.opencode/skills/   # adjust per runtime, see Compatibility
@@ -35,7 +32,7 @@ cp -r course-forge /your-project/.workbuddy/skills/
 ```
 
 - **OpenCode / Claude Code**: also available via plugin marketplace — `/plugin marketplace add xmwengxing/course-forge`.
-- **WorkBuddy / CodeBuddy**: install through the in-app skill marketplace, or place the folder at `.workbuddy/skills/course-forge/` (manual clone above). `npx skills add` is an OpenCode-style registry command and does not apply here.
+- **WorkBuddy / CodeBuddy**: install through the in-app skill marketplace, or place the folder at `.workbuddy/skills/course-forge/` (manual clone above).
 
 ---
 
@@ -137,13 +134,13 @@ Three things hold the whole system together. Break any one and chapters, audio, 
 | Codex CLI | `.codex/skills/<name>/` |
 | WorkBuddy / CodeBuddy | `.workbuddy/skills/<name>/` |
 
-Requires Node 20+ for scaffolded projects. TTS requires network access to whichever provider you pick.
+Requires Bun 1.1+ for scaffolded projects. TTS requires network access to whichever provider you pick.
 
 ## Platform notes (Windows / cross-platform)
 
-- **Shell scripts (`scripts/*.sh`)** use Bash and call `curl` / `npm` / `python3`. On **Windows** they do **not** run in `cmd.exe` or PowerShell — use **Git Bash** (bundled with Git for Windows) or **WSL**. Example: `bash scripts/scaffold.sh ./my-course --theme=chalk-garden`.
+- **Shell scripts (`scripts/*.sh`)** use Bash and call `curl` / `bun` / `python3`. On **Windows** they do **not** run in `cmd.exe` or PowerShell — use **Git Bash** (bundled with Git for Windows) or WSL. Example: `bash scripts/scaffold.sh ./my-course --theme=chalk-garden`.
 - **Python scripts (`scripts/*.py`)** run natively with `python` / `python3` on any OS. If your Windows Python is only available as `python` (no `python3`), run `alias python3=python` in Git Bash, or invoke the script directly with `python script.py`.
-- **Node 20+** is required for scaffolded projects (the `npm create vite` step). TTS providers additionally need network access to the chosen endpoint.
+- **Bun 1.1+** is required for scaffolded projects. The scaffold copies its pinned Vite template locally; it never invokes a package generator. TTS providers additionally need network access to the chosen endpoint.
 
 ## Upgrading from a previous version
 
@@ -152,13 +149,13 @@ Requires Node 20+ for scaffolded projects. TTS requires network access to whiche
 > in your scaffolded project. The current `useCourseLoader` imports
 > `course.json` directly from the project root, so the `public/` copy is
 > dead weight and can drift out of sync. After deleting, run
-> `npm run build` once to verify.
+> `bun run build` once to verify.
 
 The first time you pull a new version of this skill, in your scaffolded
 project run:
 
 ```bash
-npm install       # or: pnpm install / yarn install
+bun install --frozen-lockfile
 bash scripts/check-course-json-sync.sh   # exit 0 = clean
 ```
 

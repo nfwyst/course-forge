@@ -1,177 +1,130 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChapterDef } from "../registry/types";
 
-/**
- * Bump the trailing version (v4 → v5 → ...) when chapter step counts /
- * structure change so old persisted cursors don't land mid-removed-step.
- *
- * Course-mode: the key is namespaced by `courseId` so two different
- * courses served from the same origin (e.g. `?course=kids-coding` vs
- * `?course=ai-trainer-l4`) keep independent progress.
- */
 const STORAGE_KEY_VERSION = "v4";
-const storageKey = (courseId: string) =>
-  `cf-cursor-${courseId}-${STORAGE_KEY_VERSION}`;
+const storageKey = (courseId: string) => `cf-cursor-${courseId}-${STORAGE_KEY_VERSION}`;
 
-export type Cursor = { chapter: number; step: number };
+export type Cursor = { readonly chapter: number; readonly step: number };
 
 export interface StepperState {
-  cursor: Cursor;
-  totalChapters: number;
-  chapterTotalSteps: number;
-  globalIndex: number;
-  totalGlobal: number;
+  readonly cursor: Cursor;
+  readonly totalChapters: number;
+  readonly chapterTotalSteps: number;
+  readonly globalIndex: number;
+  readonly totalGlobal: number;
   next(): void;
   prev(): void;
-  jumpToChapter(idx: number, step?: number): void;
-  jumpToGlobal(globalIdx: number): void;
+  jumpToChapter(index: number, step?: number): void;
+  jumpToGlobal(index: number): void;
 }
 
-const clamp = (n: number, lo: number, hi: number) =>
-  Math.max(lo, Math.min(hi, n));
+const clamp = (value: number, minimum: number, maximum: number) =>
+  Math.max(minimum, Math.min(maximum, value));
 
-/**
- * Clamp a (possibly stale) cursor to the current chapter list. Persisted
- * cursors can outlive structural changes — fewer chapters, fewer steps,
- * a different scaffolded project sharing the same dev-server origin — so
- * we always re-validate before handing one to React.
- */
-function sanitize(cursor: Cursor, chapters: ChapterDef[]): Cursor {
+function sanitize(cursor: Cursor, chapters: readonly ChapterDef[]): Cursor {
   if (chapters.length === 0) return { chapter: 0, step: 0 };
   const chapter = clamp(cursor.chapter | 0, 0, chapters.length - 1);
-  const stepCount = chapters[chapter]!.narrations.length;
-  const step = clamp(cursor.step | 0, 0, Math.max(0, stepCount - 1));
-  return { chapter, step };
+  const steps = chapters[chapter]!.narrations.length;
+  return { chapter, step: clamp(cursor.step | 0, 0, Math.max(0, steps - 1)) };
 }
 
-export function useStepper(chapters: ChapterDef[], courseId = "default"): StepperState {
+export function useStepper(
+  chapters: readonly ChapterDef[],
+  courseId = "default",
+  initialChapter?: number,
+): StepperState {
   const key = storageKey(courseId);
+  const fallback = sanitize({ chapter: initialChapter ?? 0, step: 0 }, chapters);
   const [cursor, setCursor] = useState<Cursor>(() => {
-    const fallback = { chapter: 0, step: 0 };
-    if (typeof window === "undefined") return fallback;
+    if (typeof window === "undefined" || initialChapter !== undefined) return fallback;
     try {
-      const raw = window.localStorage.getItem(key);
-      if (raw) return sanitize(JSON.parse(raw), chapters);
+      const stored = window.localStorage.getItem(key);
+      return stored ? sanitize(JSON.parse(stored), chapters) : fallback;
     } catch {
-      /* ignore */
+      return fallback;
     }
-    return fallback;
   });
 
-  // Re-sanitize if the chapter list shape changes after mount (e.g. HMR
-  // updates `chapters.ts`) — keeps a stale persisted cursor from leaking
-  // into a render where it's now out of range.
   useEffect(() => {
-    setCursor((cur) => {
-      const next = sanitize(cur, chapters);
-      return next.chapter === cur.chapter && next.step === cur.step
-        ? cur
-        : next;
-    });
+    setCursor((current) => sanitize(current, chapters));
   }, [chapters]);
 
   useEffect(() => {
     try {
       window.localStorage.setItem(key, JSON.stringify(cursor));
     } catch {
-      /* ignore */
+      return;
     }
   }, [cursor, key]);
 
   const offsets = useMemo(() => {
-    const arr: number[] = [];
-    let acc = 0;
-    for (const c of chapters) {
-      arr.push(acc);
-      acc += c.narrations.length;
+    const result: number[] = [];
+    let total = 0;
+    for (const chapter of chapters) {
+      result.push(total);
+      total += chapter.narrations.length;
     }
-    return arr;
+    return result;
   }, [chapters]);
   const totalGlobal = useMemo(
-    () => chapters.reduce((s, c) => s + c.narrations.length, 0),
+    () => chapters.reduce((total, chapter) => total + chapter.narrations.length, 0),
     [chapters],
   );
-  const globalIndex = (offsets[cursor.chapter] ?? 0) + cursor.step;
 
   const next = useCallback(() => {
-    setCursor((cur) => {
-      const c = chapters[cur.chapter]!;
-      if (cur.step < c.narrations.length - 1)
-        return { ...cur, step: cur.step + 1 };
-      if (cur.chapter < chapters.length - 1)
-        return { chapter: cur.chapter + 1, step: 0 };
-      return cur;
+    setCursor((current) => {
+      const chapter = chapters[current.chapter]!;
+      if (current.step < chapter.narrations.length - 1) return { ...current, step: current.step + 1 };
+      if (current.chapter < chapters.length - 1) return { chapter: current.chapter + 1, step: 0 };
+      return current;
     });
   }, [chapters]);
 
   const prev = useCallback(() => {
-    setCursor((cur) => {
-      if (cur.step > 0) return { ...cur, step: cur.step - 1 };
-      if (cur.chapter > 0) {
-        const p = chapters[cur.chapter - 1]!;
-        return { chapter: cur.chapter - 1, step: p.narrations.length - 1 };
-      }
-      return cur;
+    setCursor((current) => {
+      if (current.step > 0) return { ...current, step: current.step - 1 };
+      if (current.chapter === 0) return current;
+      const chapter = chapters[current.chapter - 1]!;
+      return { chapter: current.chapter - 1, step: chapter.narrations.length - 1 };
     });
   }, [chapters]);
 
-  const jumpToChapter = useCallback(
-    (idx: number, step = 0) => {
-      const ch = clamp(idx, 0, chapters.length - 1);
-      const c = chapters[ch]!;
-      setCursor({
-        chapter: ch,
-        step: clamp(step, 0, c.narrations.length - 1),
-      });
-    },
-    [chapters],
-  );
+  const jumpToChapter = useCallback((index: number, step = 0) => {
+    const chapterIndex = clamp(index, 0, chapters.length - 1);
+    const chapter = chapters[chapterIndex]!;
+    setCursor({ chapter: chapterIndex, step: clamp(step, 0, chapter.narrations.length - 1) });
+  }, [chapters]);
 
-  const jumpToGlobal = useCallback(
-    (g: number) => {
-      const target = clamp(g, 0, totalGlobal - 1);
-      let acc = 0;
-      for (let i = 0; i < chapters.length; i++) {
-        const t = chapters[i]!.narrations.length;
-        if (target < acc + t) {
-          setCursor({ chapter: i, step: target - acc });
-          return;
-        }
-        acc += t;
+  const jumpToGlobal = useCallback((index: number) => {
+    let remaining = clamp(index, 0, totalGlobal - 1);
+    for (let chapter = 0; chapter < chapters.length; chapter += 1) {
+      const steps = chapters[chapter]!.narrations.length;
+      if (remaining < steps) {
+        setCursor({ chapter, step: remaining });
+        return;
       }
-    },
-    [chapters, totalGlobal],
-  );
+      remaining -= steps;
+    }
+  }, [chapters, totalGlobal]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.key === "ArrowRight" || e.key === " ") {
-        e.preventDefault();
-        next();
-      } else if (e.key === "ArrowLeft" || e.key === "Backspace") {
-        e.preventDefault();
-        prev();
-      } else if (e.key === "Home") {
-        jumpToChapter(0, 0);
-      } else if (e.key === "End") {
-        const last = chapters.length - 1;
-        jumpToChapter(last, chapters[last]!.narrations.length - 1);
-      } else if (e.key >= "1" && e.key <= "9") {
-        const n = Number(e.key) - 1;
-        if (n < chapters.length) jumpToChapter(n, 0);
-      }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === "ArrowRight") next();
+      else if (event.key === "ArrowLeft" || event.key === "Backspace") prev();
+      else return;
+      event.preventDefault();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev, jumpToChapter, chapters]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [next, prev]);
 
-  const ch = chapters[cursor.chapter]!;
+  const chapter = chapters[cursor.chapter]!;
   return {
     cursor,
     totalChapters: chapters.length,
-    chapterTotalSteps: ch.narrations.length,
-    globalIndex,
+    chapterTotalSteps: chapter.narrations.length,
+    globalIndex: (offsets[cursor.chapter] ?? 0) + cursor.step,
     totalGlobal,
     next,
     prev,

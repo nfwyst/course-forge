@@ -12,10 +12,9 @@
 ### 前置
 
 - 章节代码做完，每章都有 `narrations.ts`
-- 已经跑过 `npm run extract-narrations` + `npm run synthesize-audio`，
+- 已经跑过 `bun run extract-narrations` + `bun run synthesize-audio`，
   `public/audio/<id>/<step>.mp3` 全部就位
-- `npm run dev` 跑着，浏览器能打开页面（dev server 默认端口 `5174`，
-  可能在某些项目下用 `5173` —— 看 vite 启动日志）
+- `bun run dev` 跑着，浏览器能打开页面（dev server 固定端口 `5174`）
 
 ### 录制步骤
 
@@ -40,9 +39,8 @@
 > **常见录屏坑**：
 > - 用错 `?course=` 参数 → 录到的不是你想录的课程。**录前先在浏览器
 >   不带 `&auto=1` 验证一下菜单显示对不对**。
-> - 端口不是 `5174`（如老模板用 `5173`，或 `vite.config.ts` 自定义）→
->   录的 URL 跟着改。
-> - `?auto=1` 拼错大小写或漏写 → 录到的是 Manual 模式，每步要手动点。
+> - `5174` 已被其他进程占用 → 先释放该端口；模板启用 strictPort，避免录到意外服务。
+> > - `?auto=1` 拼错大小写或漏写 → 录到的是 Manual 模式，每步要手动点。
 
 > **Auto 模式严格按音频结束推进**（+ 200ms 缓冲），没有"等动画跑完"
 > 的兜底。如果你看到某步动画被切了一半 → 说明该 step 动画长于口播，
@@ -73,7 +71,7 @@
 
 如果你跳过了音频合成（`Checkpoint Audio` 选了"不合成"），按老方法：
 
-1. 浏览器全屏 → 打开 `localhost:5173`（默认 Manual 模式）
+1. 浏览器全屏 → 打开 `http://127.0.0.1:5174/`（默认 Manual 模式）
 2. **刷新一次**清空历史 step
 3. 开始录屏 → 按口播节奏点击空白推进 step
 4. 后期用任何剪辑软件配音 + 调时间线

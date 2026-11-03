@@ -16,7 +16,7 @@ API_URL="${1:-https://api.minimaxi.com/v1/t2a_v2}"
 
 echo "=== MiniMax TTS API Diagnostic ==="
 echo "Endpoint: $API_URL"
-echo "Key prefix: ${API_KEY:0:20}..."
+echo "API key: configured"
 echo ""
 
 # Test 1: Connectivity

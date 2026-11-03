@@ -76,7 +76,7 @@ fi
 read -r total_count total_size <<< "$(scan_audio "$AUDIO_DIR")"
 
 if [[ "$total_count" -eq 0 ]]; then
-  echo "错误: 在 $AUDIO_DIR 下未找到任何 .mp3 文件。请先运行 npm run synthesize-audio。"
+  echo "错误: 在 $AUDIO_DIR 下未找到任何 .mp3 文件。请先运行 bun run synthesize-audio。"
   exit 1
 fi
 

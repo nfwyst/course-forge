@@ -694,7 +694,7 @@ REQUIRED = {
 | 颜色动画主题切换时崩溃 | 直接动 CSS 变量值 | 改为只动 `transform/opacity/scale` |
 | 报错 `str.includes is not a function` | 用 animejs 直接动画 `THREE.Group` / `THREE.Vector3` | 改用 §6 替代方案 |
 | 拖拽到边界外卡住 | 容器太小 | 调 `containerFriction: 0.9` |
-| 报错 `animate is not a function` | 装错版本 (v3 改 v4 API) | `npm install animejs@^4.4.1` |
+| 报错 `animate is not a function` | 装错版本 (v3 改 v4 API) | 模板已固定 `animejs` 4.4.1；运行 `bun install --frozen-lockfile` 恢复依赖 |
 | 字符级 stagger 看起来机械 | 用 `loop: true` 而非 `onComplete` 链式 | 改用 §3 流体循环 |
 | 3D 卡片看起来是 2D | 漏 `transform-style: preserve-3d` | 加到父容器 + 子元素 |
 

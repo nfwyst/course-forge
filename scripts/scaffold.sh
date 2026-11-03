@@ -1,27 +1,4 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────
-# scaffold.sh —— 一键脚手架，创建一个 course-forge 项目。
-#
-# 用法：
-#   bash scripts/scaffold.sh <target-dir> [--theme=<id>]
-#   bash scripts/scaffold.sh --list-themes
-#
-# 例子：
-#   bash <path-to-course-forge>/scripts/scaffold.sh ./presentation
-#   bash <path-to-course-forge>/scripts/scaffold.sh ./talk --theme=paper-press
-#   bash <path-to-course-forge>/scripts/scaffold.sh --list-themes
-#
-# 跑完后，看 SKILL.md "Phase 2.4 实现单章" + references/CHAPTER-CRAFT.md
-# 了解每章怎么写（含视觉焦点与着重渲染四大支柱）。卡壳时翻 references/ANIMEJS-EXAMPLES-INDEX.md 找官方材质范例。
-#
-# 之后切换主题，覆盖一个文件即可：
-#   cp <path-to-course-forge>/themes/<id>/tokens.css \
-#      <project>/src/styles/tokens.css
-# ─────────────────────────────────────────────────────────────
-# 注意: 脚手架会生成一份最小可用的 course.json (项目根), 供 useCourseLoader
-# 静态 import。开发者按自己的章节改写即可 (参考 references/COURSE-STRUCTURE.md)。
-# 详见 SKILL.md § 2.1 脚手架。
-# ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,253 +7,89 @@ THEMES_DIR="$SKILL_DIR/themes"
 DEFAULT_THEME="midnight-press"
 
 list_themes() {
-  echo "可用主题（来自 ${THEMES_DIR}）:"
-  echo
-  for dir in "$THEMES_DIR"/*/; do
-    [[ -d "$dir" ]] || continue
-    local meta="$dir/theme.json"
-    [[ -f "$meta" ]] || continue
-    # 没有 jq，简单 grep + sed 提字段
-    local id name desc
-    id=$(grep -E '"id"' "$meta" | head -n1 | sed -E 's/.*"id":[[:space:]]*"([^"]+)".*/\1/')
-    name=$(grep -E '"nameZh"' "$meta" | head -n1 | sed -E 's/.*"nameZh":[[:space:]]*"([^"]+)".*/\1/')
-    desc=$(grep -E '"descriptionZh"' "$meta" | head -n1 | sed -E 's/.*"descriptionZh":[[:space:]]*"([^"]+)".*/\1/')
-    printf "  • %-18s %s\n      %s\n\n" "$id" "$name" "$desc"
+  echo "Available themes:"
+  for directory in "$THEMES_DIR"/*/; do
+    [[ -f "$directory/theme.json" ]] || continue
+    python3 -c '
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    theme = json.load(source)
+print("  {}: {} — {}".format(theme["id"], theme["nameZh"], theme["descriptionZh"]))
+' "$directory/theme.json"
   done
-  echo "用 --theme=<id> 选定一个。默认：${DEFAULT_THEME}。"
+  echo "Default: $DEFAULT_THEME"
 }
 
-# ── 解析参数 ──
 TARGET=""
 THEME="$DEFAULT_THEME"
-for arg in "$@"; do
-  case "$arg" in
+for argument in "$@"; do
+  case "$argument" in
     --list-themes)
       list_themes
       exit 0
       ;;
     --theme=*)
-      THEME="${arg#--theme=}"
+      THEME="${argument#--theme=}"
       ;;
     --*)
-      echo "✗ 未知参数: $arg" >&2
+      echo "✗ unknown option: $argument" >&2
       exit 1
       ;;
     *)
-      if [[ -z "$TARGET" ]]; then TARGET="$arg"; fi
+      if [[ -n "$TARGET" ]]; then
+        echo "✗ only one target directory is allowed" >&2
+        exit 1
+      fi
+      TARGET="$argument"
       ;;
   esac
 done
 
-# `npm create vite` mis-handles Windows absolute paths (it DOUBLES them into
-# an invalid `E:\...\E:\...` form and aborts). Rewrite any absolute TARGET as
-# a path RELATIVE to the current directory — create-vite handles relative
-# targets correctly on every platform.
-if [[ "$TARGET" = /* || "$TARGET" == [A-Za-z]:* || "$TARGET" == [A-Za-z]:/* ]]; then
-  if command -v python3 >/dev/null 2>&1; then
-    TARGET="$(python3 -c "import os,sys;print(os.path.relpath(sys.argv[1], sys.argv[2]))" "$TARGET" "$(pwd)")"
-  elif command -v realpath >/dev/null 2>&1; then
-    TARGET="$(realpath --relative-to="$(pwd)" "$TARGET")"
-  fi
-fi
-
 TARGET="${TARGET:-presentation}"
 THEME_DIR="$THEMES_DIR/$THEME"
-THEME_TOKENS="$THEME_DIR/tokens.css"
-
-if [[ ! -d "$THEME_DIR" || ! -f "$THEME_TOKENS" ]]; then
-  echo "✗ 找不到主题 '${THEME}'。可用主题：" >&2
-  echo >&2
-  for dir in "$THEMES_DIR"/*/; do
-    [[ -d "$dir" ]] || continue
-    echo "    • $(basename "$dir")" >&2
-  done
+if [[ ! -f "$THEME_DIR/tokens.css" ]]; then
+  echo "✗ theme '$THEME' was not found; use --list-themes" >&2
   exit 1
 fi
-
 if [[ -d "$TARGET" && -n "$(ls -A "$TARGET" 2>/dev/null || true)" ]]; then
-  echo "✗ 目标目录 '${TARGET}' 已存在且非空，已中止。" >&2
+  echo "✗ target directory '$TARGET' already exists and is not empty" >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "✗ python3 is required to list theme metadata" >&2
   exit 1
 fi
 
-if ! command -v npm >/dev/null; then
-  echo "✗ 需要 npm，但在 PATH 里没找到。" >&2
-  exit 1
-fi
-
-echo "▸ 在 $TARGET 创建 Vite + React + TS 项目"
-echo "▸ 使用主题：$THEME"
-npm create vite@latest "$TARGET" -- --template react-ts --no-interactive
-
-cd "$TARGET"
-echo "▸ 安装依赖（可能要等一会）..."
-npm install >/dev/null 2>&1
-
-echo "▸ 安装 tsx（用于 extract-narrations 脚本）..."
-npm install --save-dev tsx >/dev/null 2>&1
-
-echo "▸ 安装 animejs v4（真正动画与物理级拖拽,详见 references/ANIMEJS-GUIDE.md）..."
-npm install animejs >/dev/null 2>&1
-
-echo "▸ 用演示骨架替换默认 boilerplate"
-
-# 干掉我们不要的 Vite 默认 boilerplate
-rm -f \
-  src/App.tsx src/App.css \
-  src/main.tsx src/index.css \
-  src/assets/react.svg \
-  public/vite.svg \
-  README.md
-rmdir src/assets 2>/dev/null || true
-
-# 把脚手架文件拷到项目根
-mkdir -p \
-  src/styles src/hooks src/components src/registry \
-  src/chapters \
-  public scripts
-
-cp "$TEMPLATES/vite.config.ts" .
-cp "$TEMPLATES/index.html" .
-
-# Favicon: copy so generated projects don't 404 on /favicon.ico.
-# (index.html already declares <link rel="icon" href="/favicon.svg">.)
-mkdir -p public
-cp -r "$TEMPLATES/public/." public/ 2>/dev/null || true
-
-cp "$TEMPLATES/src/main.tsx" src/main.tsx
-cp "$TEMPLATES/src/App.tsx"  src/App.tsx
-
-# tokens.css 来自所选主题；其余样式文件原样复制
-cp "$THEME_TOKENS"                        src/styles/tokens.css
-cp "$TEMPLATES/src/styles/"*              src/styles/
-# 整目录复制 hook / component / registry / chapters —— 避免漏文件导致 tsc 失败
-cp "$TEMPLATES/src/hooks/"*               src/hooks/
-# components 可能含子目录（如 scenes/ 实景组件库），用 -r 递归复制
-cp -r "$TEMPLATES/src/components/"*       src/components/
-cp "$TEMPLATES/src/registry/"*            src/registry/
-cp -r "$TEMPLATES/src/chapters/"*         src/chapters/ 2>/dev/null || true
-
-# Audio pipeline scripts (extract-narrations + synthesize-audio runner +
-# pluggable TTS providers under tts-providers/).
-cp "$TEMPLATES/scripts/extract-narrations.ts"  scripts/extract-narrations.ts
-cp "$TEMPLATES/scripts/synthesize-audio.sh"    scripts/synthesize-audio.sh
-chmod +x scripts/synthesize-audio.sh
-cp "$TEMPLATES/scripts/subtitle-timing.py"    scripts/subtitle-timing.py
-chmod +x scripts/subtitle-timing.py
-
-mkdir -p scripts/tts-providers
-cp "$TEMPLATES/scripts/tts-providers/README.md"   scripts/tts-providers/README.md
-cp "$TEMPLATES/scripts/tts-providers/minimax.sh"  scripts/tts-providers/minimax.sh
-cp "$TEMPLATES/scripts/tts-providers/openai.sh"   scripts/tts-providers/openai.sh
-# edge-tts = zero-key fallback (no API key, just `pip install edge-tts`).
-# Ship it by default so `?auto=1` + subtitles work without a paid TTS key.
-cp "$TEMPLATES/scripts/tts-providers/edge.sh"     scripts/tts-providers/edge.sh
-chmod +x scripts/tts-providers/*.sh
-cp "$TEMPLATES/scripts/compress-audio.sh"     scripts/compress-audio.sh
-chmod +x scripts/compress-audio.sh
-cp "$TEMPLATES/scripts/regenerate-course-json.py" scripts/regenerate-course-json.py
-chmod +x scripts/regenerate-course-json.py
-cp "$TEMPLATES/scripts/lint-course.py"        scripts/lint-course.py
-chmod +x scripts/lint-course.py
-
-# Wire the audio scripts into npm so contributors don't have to remember
-# the exact command. Uses node to merge into the existing package.json.
-node -e '
-const fs = require("fs");
-const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
-p.scripts = Object.assign({}, p.scripts, {
-  "extract-narrations": "tsx scripts/extract-narrations.ts",
-  "synthesize-audio":   "bash scripts/synthesize-audio.sh",
-  "compress-audio":     "bash scripts/compress-audio.sh",
-  "regenerate-course-json": "python3 scripts/regenerate-course-json.py",
-  "lint":               "python3 scripts/lint-course.py",
-});
-fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
-'
-
-# 生成空的 course.json —— useCourseLoader 静态 import ../../course.json，
-# 缺它 tsc 会失败。章节必须先在 chapters.ts 注册，再加入此文件。
-cat > course.json <<'JSON'
-{
-  "courseId": "course",
-  "title": "待命名课程",
-  "outlineSegments": []
-}
-JSON
-
-# 留个标记，以后能查这个项目从哪个主题起步的
-{
-  echo "$THEME"
-} > .theme
-
-# 跑一次 typecheck 确认接线 OK
-echo "▸ 跑 typecheck ..."
-if npx tsc --noEmit; then
-  echo "✓ typecheck 通过"
-else
-  echo "✗ typecheck 失败 —— 请看上面的错误" >&2
-  exit 1
-fi
+mkdir -p "$TARGET"
+cp -R "$TEMPLATES/." "$TARGET/"
+rm -rf "$TARGET/node_modules" "$TARGET/dist" "$TARGET/.vite" "$TARGET/scripts/__pycache__"
+cp "$THEME_DIR/tokens.css" "$TARGET/src/styles/tokens.css"
+cp "$SKILL_DIR/scripts/check-course-json-sync.sh" "$TARGET/scripts/check-course-json-sync.sh"
+printf '%s\n' "$THEME" > "$TARGET/.theme"
 
 cat <<EOF
+✓ Created $TARGET with the $THEME theme.
 
-✓ 完成。下一步：
+Next steps:
+  cd $TARGET
+  bun install --frozen-lockfile
+  bun run check
+  bun run lint
+  bun run dev              # http://127.0.0.1:5174
 
-  1. cd $TARGET
-  2. npm run dev      # 默认 http://localhost:5174（被占会自动换端口）
+The generated package.json pins every direct dependency exactly. The scaffold
+never invokes an online generator, mutates dependencies, or accesses parent
+files. It includes scripts/record.sh and scripts/record.js; install Playwright's
+browser once with:
 
-当前主题：${THEME}（见 .theme）
+  bun run playwright install chromium
 
-然后：
+Then record a running course with:
 
-  • 点舞台任意位置推进全局 step 计数器。
-  • 底部状态徽章显示当前播放模式；按 M 键循环 MANUAL / AUDIO / AUTO。
-  • 在 src/chapters/ 下创建你自己的章节（mkdir src/chapters/01-<id>）
-    （流程见 SKILL.md "Phase 2.4 实现单章" —— 每章一次到位完整版本，
-     不分骨架 / 精修两步；视觉设计按 CHAPTER-CRAFT.md 四大支柱）。
-  • 在 src/registry/chapters.ts 注册每个新章节。
-  • course.json 已在项目根生成，按需增删 outlineSegments / chapters（id 必须
-    与 chapters.ts 注册一致），详见 references/COURSE-STRUCTURE.md。
-  • **每章必须有 narrations.ts**（与章节 .tsx 同目录），
-    数组长度 = step 数，是音频合成 + Auto 模式的唯一真相源。
-  • 章节改了就 bump src/hooks/useStepper.ts 的 STORAGE_KEY 末尾版本号。
-  • 每写完一章跑 \`npm run lint\` —— 校验 5 条硬规则（视觉演示 / 互动密度 /
-    逐步揭示 / 口播对齐），静态拦截反模式。
+  bun run record -- --dev --headless --out course-recording.mp4
 
-录制：
-
-  • 手动模式：直接打开 http://localhost:5174（点击 / 方向键推进）
-  • 半自动：URL 加 ?audio=1 — 音频跟 step 切，但你手动推进
-  • 全自动录屏：URL 加 ?auto=1 — 按一次 SPACE 启动，整片自动播 + 推进
-                按 M 键随时切换三种模式。
-
-音频合成（可选，录制前做）：
-
-  npm run extract-narrations    # 扫所有章节 narrations.ts → audio-segments.json
-  npm run synthesize-audio      # 默认 minimax provider 合成 → public/audio/<id>/<step>.mp3
-                                # 换 provider：PRESENTATION_TTS=<name> npm run synthesize-audio
-                                # 自定义 / 没装 mmx 见 scripts/tts-providers/README.md
-
-写章节时必读（单一入口，路径在 SKILL 仓库内）：
-
-  • $SKILL_DIR/references/CHAPTER-CRAFT.md
-      十条原则 → 视觉演示要求 → 逐步揭示 → 内容取舍 → 双源原则 →
-      视频演示审美 → 避免 AI 味 → 代码层最小约束 → 完工自检 →
-      附录 L: animejs 升级
-  • $SKILL_DIR/themes/$THEME/theme.json
-      看 descriptionZh / mood / bestFor —— 参考主题气质
-      （动画 / 时长 / 字号 / emoji 由 chapter agent 在每章自由决定）
-
-卡壳时可翻：
-
-  • $SKILL_DIR/references/CHAPTER-CRAFT.md
-      § 模拟实景模式库 + § 视觉焦点与着重渲染四大支柱
-  • $SKILL_DIR/references/ANIMEJS-EXAMPLES-INDEX.md
-      animejs 官方材质范例（看"形"，不要照搬）
-
-要换一个主题，覆盖 tokens.css 即可：
-  cp $SKILL_DIR/themes/<id>/tokens.css src/styles/tokens.css
-
-想自创主题，看 $SKILL_DIR/references/THEMES.md。
-
+Build chapters under src/chapters/, register them in src/registry/chapters,
+and add matching IDs to course.json. Run bun run lint after each chapter.
 EOF

@@ -430,8 +430,8 @@ AI 生成的网页有几种共有的"视觉指纹"，**全部不要**：
 - [ ] 章节交付时**主动告诉用户**："本章还缺这些素材"
 - [ ] 禁止出现小号字体，大量纯文字（出现后必须回去改）
 - [ ] 禁止出现任何形式的页眉页脚，仅展示关键内容（出现后必须回去改）
-- [ ] **`npx tsc --noEmit` 通过** —— 不通过禁止汇报"做完了"
-- [ ] **`npm run lint` 通过** —— 规则校验脚本会静态检查：每章至少 1 处视觉演示 / 交互密度（约每 3 屏 1 处互动）/ 是否用了 `Reveal` 渐进揭示 / 是否整屏纯文字 / `narrations.ts` 步数与口播对齐。任一 FAIL 即回去改，禁止带 Lint 报错汇报（详见 [`references/COURSE-STRUCTURE.md`](COURSE-STRUCTURE.md) § 渐进揭示 与 § 章节密度约束）
+- [ ] **`bun run check` 通过** —— 不通过禁止汇报"做完了"
+- [ ] **`bun run lint` 通过** —— 规则校验脚本会静态检查：每章至少 1 处视觉演示 / 交互密度（约每 3 屏 1 处互动）/ 是否用了 `Reveal` 渐进揭示 / 是否整屏纯文字 / `narrations.ts` 步数与口播对齐。任一 FAIL 即回去改，禁止带 Lint 报错汇报（详见 [`references/COURSE-STRUCTURE.md`](COURSE-STRUCTURE.md) § 渐进揭示 与 § 章节密度约束）
 - [ ] 章节代码物理隔离：独立 CSS 类前缀（`.cd-` / `.mg-` / ...），
       未跨章 import，未修改 `chapters.ts` 之外的共享文件
 - [ ] **`narrations.ts` 存在**且 `narrations.length` === 章节代码里

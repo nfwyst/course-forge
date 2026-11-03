@@ -33,3 +33,7 @@ e/
 *.bak
 SKILL.md.bak
 .workbuddy/
+
+# The generated project needs its exact Bun resolution committed even though
+# the repository-wide excludes file ignores lockfiles by default.
+!templates/bun.lock

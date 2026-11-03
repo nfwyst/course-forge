@@ -231,7 +231,7 @@ brief.md 写完后**必须停，让用户确认**。确认后把它当作冻结�
   - 剧本的"画面意图"是**文字描述**，视觉代理据此选 animejs / CSS / SVG / Canvas 实现；
   - 剧本的"互动意图"映射到 `useState` + 事件（每 3 屏 ≥ 1 处真互动）；
   - `narrations.ts` 由剧本 beat 的口播文本生成，守"唯一真相源"不变量。
-- 沿用 5 条课件内容硬规则 + `npm run lint` 0 FAIL 才汇报。
+- 沿用 5 条课件内容硬规则 + `bun run lint` 0 FAIL 才汇报。
 
 ---
 

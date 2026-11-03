@@ -23,10 +23,7 @@
 ## 安装
 
 ```bash
-# 推荐（OpenCode 风格注册表）— skills CLI
-npx skills add xmwengxing/course-forge
-
-# 或手动克隆（适用于任意运行时）
+# 手动克隆（适用于任意运行时）
 git clone https://github.com/xmwengxing/course-forge.git
 #  OpenCode / Claude Code / Cursor / Codex：
 cp -r course-forge /你的项目/.opencode/skills/   # 按运行时调整，见「兼容性」
@@ -35,7 +32,7 @@ cp -r course-forge /你的项目/.workbuddy/skills/
 ```
 
 - **OpenCode / Claude Code**：也可走插件市场 —— `/plugin marketplace add xmwengxing/course-forge`。
-- **WorkBuddy / CodeBuddy**：通过应用内技能市场安装，或把文件夹放到 `.workbuddy/skills/course-forge/`（即上面的手动克隆）。`npx skills add` 是 OpenCode 风格注册表命令，在此不适用。
+- **WorkBuddy / CodeBuddy**：通过应用内技能市场安装，或把文件夹放到 `.workbuddy/skills/course-forge/`（即上面的手动克隆）。
 
 ---
 
@@ -136,13 +133,13 @@ Step     — 屏内原子揭示单元：1 步 = 1 口播节拍 = 1 字幕窗 = 1
 | Codex CLI | `.codex/skills/<name>/` |
 | WorkBuddy / CodeBuddy | `.workbuddy/skills/<name>/` |
 
-脚手架出来的项目要 Node 20+。TTS 视所选 provider 需要对应网络。
+脚手架出来的项目要 Bun 1.1+。TTS 视所选 provider 需要对应网络。
 
 ## 平台说明（Windows / 跨平台）
 
-- **Shell 脚本（`scripts/*.sh`）**使用 Bash，并调用 `curl` / `npm` / `python3`。在 **Windows** 上它们**不能**在 `cmd.exe` 或 PowerShell 里直接运行——请使用 **Git Bash**（随 Git for Windows 一同安装）或 **WSL**。示例：`bash scripts/scaffold.sh ./my-course --theme=chalk-garden`。
+- **Shell 脚本（`scripts/*.sh`）**使用 Bash，并调用 `curl` / `bun` / `python3`。在 **Windows** 上它们**不能**在 `cmd.exe` 或 PowerShell 里直接运行——请使用 **Git Bash**（随 Git for Windows 一同安装）或 WSL。示例：`bash scripts/scaffold.sh ./my-course --theme=chalk-garden`。
 - **Python 脚本（`scripts/*.py`）**在任意系统上用 `python` / `python3` 原生运行。若你的 Windows 上 Python 只叫 `python`（没有 `python3`），可在 Git Bash 里 `alias python3=python`，或直接用 `python script.py` 调用。
-- 脚手架出来的项目需要 **Node 20+**（含 `npm create vite` 步骤）。TTS 还需对应 provider 的网络访问。
+- 脚手架出来的项目需要 **Bun 1.1+**。脚手架只复制本仓库锁定版本的 Vite 模板，不调用在线生成器。TTS 还需对应 provider 的网络访问。
 
 
 ---

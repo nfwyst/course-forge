@@ -134,8 +134,8 @@ my-course/
     │   ├── synthesize-audio.sh     # provider-agnostic runner
     │   ├── subtitle-timing.py      # --chapters 可过滤
     │   ├── regenerate-course-json.py  # 校验 + 格式化 course.json
-    │   ├── lint-course.py          # 校验 5 条硬规则（npm run lint）
-    │   └── tts-providers/          # 每 provider 一个 .sh（minimax 默认 / openai 内置）
+    │   ├── lint-course.py          # 校验 5 条硬规则（bun run lint）
+    │   └── tts-providers/          # 每 provider 一个 .sh（edge 默认，minimax / openai 内置）
     ├── audio-segments.json         # extract 产出（合成前 review）
     └── public/audio/<id>/<N>.mp3   # 可选：合成的音频
 ```
@@ -164,7 +164,7 @@ my-course/
 5. **口播对齐**：口播文本、屏上元素、字幕、音频（若合成）必须一一对应；守 `narrations.ts` 不变量。
 
 > 这 5 条是「交互式课程」区别于「视频」的核心。已由 `scripts/lint-course.py`
-> （脚手架接入 `npm run lint`）在每章完工后自动拦截。
+> （脚手架接入 `bun run lint`）在每章完工后自动拦截。
 
 ---
 
@@ -317,7 +317,7 @@ agent **应**通过**渐进式披露**按需加载现成的**设计类 skill 或
 - **元素级逐步揭示**优先用 `Reveal` 组件（`templates/src/components/Reveal.tsx`，支持
   `rise / scale / pop / fade` 变体 + `delay`/`duration`），不止文字——包裹卡片 / SVG 组 /
   图片 / 按钮即可随 `step` 逐元素进场，避免手写重复 CSS。
-- 每章完工跑 **`npm run lint`**（`templates/scripts/lint-course.py`）——静态校验 5 条硬规则
+- 每章完工跑 **`bun run lint`**（`templates/scripts/lint-course.py`）——静态校验 5 条硬规则
   （视觉演示 / 互动密度 / 逐步揭示 / 口播对齐），0 FAIL 才向用户汇报。
 
 ### 2.5 大改后 bump STORAGE_KEY

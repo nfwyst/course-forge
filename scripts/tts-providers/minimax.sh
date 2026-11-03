@@ -27,13 +27,13 @@ tts_install_help() {
 To use the MiniMax direct-curl provider:
 
   Export your Token Plan API key:
-    export MINIMAX_API_KEY=sk-cp-sax-xxxxx
+    export MINIMAX_API_KEY=<your-token-plan-key>
 
   Optional — configure model / voice:
     export PRESENTATION_MINIMAX_MODEL=speech-2.8-hd         # default
     export PRESENTATION_MINIMAX_VOICE=male-cn-instructor  # default
 
-  Or pick another provider:  PRESENTATION_TTS=<name> npm run synthesize-audio
+  Or pick another provider:  PRESENTATION_TTS=<name> bun run synthesize-audio
 EOF
 }
 
@@ -41,57 +41,94 @@ tts_synthesize() {
   local text="$1"
   local out="$2"
   local voice="${3:-$VOICE}"
+  local tmp_dir tmp_resp payload status
 
-  local tmp_resp
-  tmp_resp=$(mktemp --suffix=.json)
+  # macOS and GNU mktemp both support a template with Xs; --suffix is GNU-only.
+  tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/course-forge-minimax.XXXXXX")
+  tmp_resp="$tmp_dir/response.json"
+  payload=$(python3 -c '
+import json
+import sys
 
-  curl -s -X POST "$API_URL" \
+model, text, voice = sys.argv[1:]
+print(json.dumps({
+    "model": model,
+    "text": text,
+    "voice_setting": {"voice_id": voice},
+    "subtitle_enable": True,
+    "subtitle_type": "word",
+}, ensure_ascii=False))
+' "$MODEL" "$text" "$voice")
+
+  if ! curl -fsS -X POST "$API_URL" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
-    -d "$(python3 -c "
-import json, sys
-payload = {
-    'model': '$MODEL',
-    'text': sys.argv[1],
-    'voice_setting': {'voice_id': '$voice'},
-    'subtitle_enable': True,
-    'subtitle_type': 'word'
-}
-print(json.dumps(payload, ensure_ascii=False))
-" "$text")" \
-    -o "$tmp_resp"
-
-  if grep -q '"status_code":\s*0' "$tmp_resp" 2>/dev/null; then
-    python3 -c "
-import json, sys, os
-with open('$tmp_resp') as f:
-    resp = json.load(f)
-audio_hex = resp.get('data', {}).get('audio', '')
-if audio_hex:
-    with open('$out', 'wb') as f:
-        f.write(bytes.fromhex(audio_hex))
-
-# Extract word-level subtitle timing from response
-subtitles = resp.get('extra_info', {}).get('subtitles', [])
-if subtitles:
-    word_dir = os.path.join('public', 'minimax-word-timing', os.path.basename(os.path.dirname('$out')))
-    os.makedirs(word_dir, exist_ok=True)
-    word_file = os.path.join(word_dir, os.path.basename('$out').replace('.mp3', '.json'))
-    word_data = [{'text': s['text'], 'start_ms': s.get('start_ms', 0), 'end_ms': s.get('end_ms', 0)} for s in subtitles]
-    with open(word_file, 'w') as f:
-        json.dump(word_data, f, ensure_ascii=False)
-else:
-    print('No word timing in response (audio OK, subtitle will fall back to default mode)', file=sys.stderr)
-"
-    rm -f "$tmp_resp"
-  else
-    echo "✗ MiniMax API error:" >&2
-    python3 -c "
-import json
-with open('$tmp_resp') as f:
-    print(json.dumps(json.load(f), indent=2, ensure_ascii=False))
-" >&2
-    rm -f "$tmp_resp"
+    -d "$payload" \
+    -o "$tmp_resp"; then
+    rm -rf "$tmp_dir"
     return 1
+  fi
+
+  if python3 -c '
+import json
+import os
+import sys
+
+response_path, output_path = sys.argv[1:]
+with open(response_path, encoding="utf-8") as response_file:
+    response = json.load(response_file)
+
+base_response = response.get("base_resp", response)
+if base_response.get("status_code") != 0:
+    raise SystemExit(2)
+
+audio_hex = response.get("data", {}).get("audio", "")
+if not audio_hex:
+    print("MiniMax response contained no audio data.", file=sys.stderr)
+    raise SystemExit(3)
+
+try:
+    audio = bytes.fromhex(audio_hex)
+except ValueError:
+    print("MiniMax response contained invalid audio data.", file=sys.stderr)
+    raise SystemExit(4)
+
+with open(output_path, "wb") as audio_file:
+    audio_file.write(audio)
+
+subtitles = response.get("extra_info", {}).get("subtitles", [])
+if subtitles:
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(output_path)))))
+    chapter = os.path.basename(os.path.dirname(output_path))
+    word_dir = os.path.join(project_root, "public", "minimax-word-timing", chapter)
+    os.makedirs(word_dir, exist_ok=True)
+    word_file = os.path.join(word_dir, os.path.basename(output_path).replace(".mp3", ".json"))
+    word_data = [
+        {
+            "text": subtitle["text"],
+            "start_ms": subtitle.get("start_ms", 0),
+            "end_ms": subtitle.get("end_ms", 0),
+        }
+        for subtitle in subtitles
+    ]
+    with open(word_file, "w", encoding="utf-8") as timing_file:
+        json.dump(word_data, timing_file, ensure_ascii=False)
+else:
+    print("No word timing in response; subtitles will use default timing.", file=sys.stderr)
+' "$tmp_resp" "$out"; then
+    rm -rf "$tmp_dir"
+    return 0
+  else
+    status=$?
+    echo "✗ MiniMax API error:" >&2
+    python3 -c '
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as response_file:
+    print(json.dumps(json.load(response_file), indent=2, ensure_ascii=False))
+' "$tmp_resp" >&2 || true
+    rm -rf "$tmp_dir"
+    return "$status"
   fi
 }

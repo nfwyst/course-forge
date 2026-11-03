@@ -3,8 +3,8 @@
  * a flat segment list that the TTS pipeline can consume.
  *
  * Run via:
- *   npm run extract-narrations           # writes audio-segments.json
- *   npm run extract-narrations -- --print # also prints to stdout
+ *   bun run extract-narrations           # writes audio-segments.json
+ *   bun run extract-narrations -- --print # also prints to stdout
  *
  * Reads chapter order from src/registry/chapters.ts via a simple regex
  * (no React/CSS evaluation needed). For each chapter it dynamically

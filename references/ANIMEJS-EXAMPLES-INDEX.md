@@ -1,324 +1,70 @@
 # ANIMEJS-EXAMPLES-INDEX.md
 
-> **Skill 角色定位**: animejs 官方 25 个示例的索引表, 按"你要做什么效果"反向查找。
+> **Skill 角色定位**: animejs 官方示例的索引表, 按"你要做什么效果"反向查找。
 > **面向读者**: LLM agent。
-> **来源**: `github.com/juliangarnier/anime/blob/master/examples/`
+> **版本边界**: 本课程模板锁定 `animejs@4.4.1`。不链接可变 Git 分支；请从该版本的已安装包或 Anime.js 4.4.1 发布材料中核对 API，再按本表的示例名查找等价示例。
 > **License**: MIT (Julian Garnier) — 公共仓库引用, 不复制完整文件, 仅给定位 + 适用场景。
 > **何时读**: 你正在为 chapter 选动画模式, 需要看真实运行效果 / 想抄核心代码片段时, 查本表。
-> **何时不读**: 你只写"普通入场/出场/状态切换"动画, 用 SKILL.md + CHAPTER-CRAFT.md + ANIMEJS-GUIDE.md §4 基础 5 封装足够, 不必读本表。
-
----
+> **何时不读**: 你只写普通入场/出场/状态切换动画, 用 SKILL.md + CHAPTER-CRAFT.md + ANIMEJS-GUIDE.md §4 基础封装足够, 不必读本表。
 
 ## 0. 用法
 
-按**效果关键词**反向查 (例如"我想做卡片 3D 翻转" → 看 "卡片堆/3D 立体" 行 → 点开对应示例目录看 `index.html` + `index.js` 源码)。
-
-每行格式:
-```
-示例名 | 核心 API | 适用场景 | 源码行数
-```
-
----
-
-## 1. CSS 3D 立体 (perspective + preserve-3d + rotateY/X/Z)
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `onscroll-sticky` | 3D 卡片堆 (`rotateY: [-180, 0]` 翻转入场 + `rotateZ` 持续旋转 + 鼠标 hover translateY) | 卡片堆叠翻转 / 多层卡片展示 | 55 |
-| `onscroll-responsive-scope` | 响应式 3D 卡片 (orientation media query 切换布局) | 响应式设备 3D 卡片 | 49 |
-| `clock-playback-controls` | 3D 钟面 (12 数字 + 3 指针, 弹性 easing 控制时间) | 钟面 / 仪表盘 / 3D 圆盘 | 106 |
-| `draggable-playground` | 3D 拖拽物理 (`Draggable` + 3D `rotateX/Y`) | 物理拖拽 + 3D 翻转 | 360 |
-| `auto-layout/periodic-table` | `createLayout` 切换 sphere/helix/grid 3D 布局 | 元素 3D 球面/螺旋/网格分布 | 317 |
-| `auto-layout/planets` | 球面 3D 布局 (类似 periodic-table) | 球面元素 | 200 |
-| `auto-layout/cards` | 3D 卡片切换布局 | 卡片 3D 切换 | 37 |
-| `additive-creature` | 13×13 粒子网格 + `mix-blend-mode: plus-lighter` 光晕 | 光晕/烟雾/云朵生物 | 104 |
-| `additive-fireflies` | 萤火虫粒子跟随鼠标 + `mix-blend-mode` | 装饰性粒子跟随 | 60 |
-| `clock-playback-controls` | 3D 钟面 + playback control | 时间/播放控制可视化 | 171 HTML |
-
-**对应 ANIMEJS-GUIDE.md**: §1 CSS 3D 立体路径
-
-**速选**:
-- 卡片堆 → `onscroll-sticky`
-- 卡片旋转 → `onscroll-responsive-scope`
-- 钟面/仪表 → `clock-playback-controls`
-- 球面布局 → `auto-layout/periodic-table` 或 `auto-layout/planets`
-- 粒子光晕 → `additive-creature` 或 `additive-fireflies`
-- 拖拽物理 → `draggable-playground`
-
----
-
-## 2. 字符级 stagger (按字符/词入场)
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `animejs-v4-logo-animation` | SVG 字符独立 stagger + 5 段 timeline (FALL→WIGGLE→POP→SWEECH→OUTRO) + 自定义 splashCurve + svg.morphTo | 标题字符入场 / 数字翻滚 / 词组拆解 | 260 |
-| `text/hover-effects` | 字符级 hover 效果 + `splitText` API | 文本悬停效果 | (子目录) |
-| `text/scramble` | 字符随机扰动解密 (`scrambleText` API) | 数字/字符加密感 | (子目录) |
-| `text/split-effects` | 字符/词/行拆解 + 多 keyframe 弹入 | 标题多种入场效果 | (子目录) |
-| `text/split-playground` | `splitText` API playground | 调试字符拆解 | (子目录) |
-| `irregular-playback-typewriter` | 不规则播放打字机效果 | 打字机/输入效果 | 31 |
-
-**对应 ANIMEJS-GUIDE.md**: §2 字符级 stagger 路径
-
-**速选**:
-- 标题字符入场 → `animejs-v4-logo-animation` (5 段 timeline 范式)
-- 文本悬停 → `text/hover-effects`
-- 字符解密 → `text/scramble`
-- 打字机 → `irregular-playback-typewriter`
-
----
-
-## 3. 流体循环 (持续在动, 无固定终点)
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `layered-css-transforms` | 6 形状 100+ keyframe 随机 + `onComplete` 链式永久循环 + `utils.randomPick([eases])` + `createSpring()` 混合 | 流体/漂浮/装饰持续动 | 63 |
-| `additive-creature` | 169 粒子网格 + `composition: 'blend'` 复合 | 粒子烟雾/光晕 | 104 |
-| `additive-fireflies` | 萤火虫粒子 + 鼠标交互 | 鼠标交互装饰 | 60 |
-| `canvas-2d` | Canvas 2D + 4000 粒子 + RAF + animejs 驱动 JS Object 属性 | 大量粒子 | 77 |
-| `timeline-stress-test` | `composition` 复合测试 | 性能压测 | 29 |
-| `timeline-seamless-loop` | 无缝循环 timeline | 循环动画 | 60 |
-
-**对应 ANIMEJS-GUIDE.md**: §3 流体循环路径
-
-**速选**:
-- 6 形状持续漂动 → `layered-css-transforms` (核心范式)
-- 100+ 粒子网格 → `additive-creature`
-- Canvas 2D 大量粒子 → `canvas-2d`
-
----
-
-## 4. SVG 描线与变形
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `svg-line-drawing` | `svg.createDrawable()` 路径描线 | 雷达扫描/地图连线/对勾绿 | 79 |
-| `svg-graph` | SVG mask + 路径 + `svg.createDrawable` 组合 | 数据图/折线图动画 | 39 |
-
-**对应 ANIMEJS-GUIDE.md**: §4.3 `svg.createDrawable()` / §4.5 数据图
-
-**速选**:
-- 路径描线 → `svg-line-drawing`
-- 数据图动画 → `svg-graph`
-
----
-
-## 5. Stagger 错开 (基础)
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `stagger` | 1000 dots 随机位置 + `stagger([0, 2000], { grid: true, from: 'center' })` 网格 stagger | 节点滚动/批量入场 | 32 |
-| `advanced-grid-staggering` | 网格 stagger + grid 起始点切换 | 网格扫描/游标跟随 | 76 |
-
-**对应 ANIMEJS-GUIDE.md**: §4.2 `stagger()`
-
-**速选**:
-- 节点滚动 → `stagger`
-- 网格扫描 → `advanced-grid-staggering`
-
----
-
-## 6. Timeline / onScroll / 状态机
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `timeline-50K-stars` | 50K 粒子 + `createTimeline` + `composition: 'blend'` + `progress` 驱动 | 性能/状态机 | 146 |
-| `timeline-refresh-starlings` | `timeline.refresh()` 动态重排 | 动态重排 | 59 |
-| `timeline-stress-test` | `composition` 压力测试 | 性能优化 | 29 |
-| `easings-visualizer` | 完整 11 种 easing 可视化对比 | 调试/选 easing | 304 |
-| `animatable-follow-cursor` | `createAnimatable` 跟随鼠标 | 鼠标跟随 | 47 |
-| `auto-layout/todo-list` | `createLayout` 增删改排序 | 增删改/排序 | - |
-| `auto-layout/accordion` | 展开/折叠 | FAQ/手风琴 | 13 |
-| `auto-layout/onscroll` | scroll 驱动 layout 切换 | 滚动联动布局 | - |
-
-**对应 ANIMEJS-GUIDE.md**: §4.5 `onScroll` + 状态机相关
-
-**速选**:
-- 状态机/多阶段 → `timeline-50K-stars`
-- 选 easing → `easings-visualizer`
-- 鼠标跟随 → `animatable-follow-cursor`
-- 增删改/排序 → `auto-layout/todo-list` + `draggable-infinite-auto-carousel`
-
----
-
-## 7. 拖拽交互
-
-| 示例 | 核心 API | 适用场景 | JS 行数 |
-|---|---|---|---|
-| `draggable-infinite-auto-carousel` | `Draggable` 无限滚动 carousel | 横向轮播/拖拽 | 69 |
-| `draggable-mouse-scroll-snap-carousel` | `Draggable` + 滚轮 + snap | 拖拽+滚轮 | 100 |
-| `draggable-playground` | 拖拽 3D 物理 playground | 完整拖拽参考 | 360 |
-
-**对应 ANIMEJS-GUIDE.md**: §4.4 `Draggable`
-
-**速选**:
-- 拖拽排序 → `draggable-mouse-scroll-snap-carousel`
-- 3D 拖拽 → `draggable-playground`
-- 无限轮播 → `draggable-infinite-auto-carousel`
-
----
-
-## 9. Three.js adapter (v4.5.0+ 内置, 真 3D 场景)
-
-> **何时读**: 你的项目用 `animejs ^4.5.0+`, 需要真 3D 场景 (光照 / PBR 材质 / 后处理 / 物理), **CSS 3D 表达不了**。
-> **何时不读**: 你的项目锁 `animejs ^4.4.1` — §6 不适用, 用 §1 CSS 3D 替代。
-> **官网文档**: https://animejs.com/documentation/adapters/three
-
-### 用法 (副作用导入)
-
-```js
-import * as THREE from "three";
-import { animate, createTimeline } from "animejs";
-import "animejs/adapters/three"; // ★ 副作用导入, 扩展 animate() 到 Three.js
-
-const cube = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
-scene.add(cube);
-
-animate(cube.position, { x: 100, y: 50, z: 0, duration: 1000, ease: "outBounce" });
-animate(cube.rotation, { x: Math.PI, y: Math.PI, duration: 2000 });
-animate(cube.material, { color: 0x00ff00, opacity: 0.8, duration: 1500 });
-```
-
-### 支持的 Three.js 类型
-
-| 类型 | 示例 |
-|---|---|
-| `Object3D` (位置 / 旋转 / 缩放) | `mesh.position`, `mesh.rotation`, `mesh.scale` |
-| `Materials` (color / opacity / emissive) | `mesh.material.color`, `mesh.material.opacity` |
-| `Lights` (intensity / distance) | `light.intensity`, `light.distance` |
-| `Cameras` (fov / position) | `camera.fov`, `camera.position` |
-| `Audio nodes` | `audioContext.destination` |
-| `UniformNode` (TSL / WebGPU) | `uniformNode.value` |
-| `InstancedMesh` | `instancedMesh.count` |
-
-### 配合 stagger 3D (v4.5.0 新增)
-
-```js
-// {x, y, z} 坐标 stagger
-animate(".dot", {
-  translateX: stagger(10, { grid: [10, 10, 10], from: [0.5, 0.5, 0.5] }),
-  translateY: stagger(10, { grid: [10, 10, 10], from: [0.5, 0.5, 0.5] }),
-  translateZ: stagger(10, { grid: [10, 10, 10], from: [0.5, 0.5, 0.5] }),
-  duration: 1500,
-});
-```
-
-### 速查表 (含 v4.5.0 Three.js 场景)
-
-| 需求 | 推荐 |
-|---|---|
-| 卡片堆 / 简单立方体 | §1 CSS 3D |
-| 光照 / PBR 材质 / 阴影 | §6 Three.js adapter (v4.5.0+) |
-| 物理模拟 (碰撞 / 重力) | §6 Three.js + cannon-es / rapier |
-| 大量粒子 (1000+) | §6 Three.js InstancedMesh |
-| 后处理 (bloom / blur) | §6 Three.js EffectComposer |
-| 简单入场 / 出场 | §4 基础 5 封装 (无需 §1/§6) |
-
-**对应 ANIMEJS-GUIDE.md**: §6 Three.js 集成
-
----
-
-## 8. 总览: 25 个示例速查表 (按 JS 行数排序)
-
-| 行数 | 示例 | 类型 |
-|---|---|---|
-| 13 | `auto-layout/accordion` | 折叠 |
-| 29 | `timeline-stress-test` | 性能 |
-| 31 | `irregular-playback-typewriter` | 文本 |
-| 32 | `stagger` | 基础 stagger |
-| 37 | `auto-layout/cards` | 3D 卡片 |
-| 39 | `svg-graph` | SVG |
-| 47 | `animatable-follow-cursor` | 鼠标跟随 |
-| 48 | `onscroll-responsive-scope` | 3D 卡片 |
-| 55 | `onscroll-sticky` | 3D 卡片 |
-| 60 | `additive-fireflies` | 粒子 |
-| 60 | `timeline-seamless-loop` | 循环 |
-| 63 | `layered-css-transforms` | 流体 |
-| 69 | `draggable-infinite-auto-carousel` | 拖拽 |
-| 76 | `advanced-grid-staggering` | 网格 |
-| 77 | `canvas-2d` | Canvas 粒子 |
-| 79 | `svg-line-drawing` | SVG |
-| 100 | `draggable-mouse-scroll-snap-carousel` | 拖拽 |
-| 104 | `additive-creature` | 粒子 |
-| 106 | `clock-playback-controls` | 3D 钟 |
-| 146 | `timeline-50K-stars` | 状态机 |
-| 200 | `auto-layout/planets` | 球面 |
-| 260 | `animejs-v4-logo-animation` | 字符级 |
-| 304 | `easings-visualizer` | 调试 |
-| 317 | `auto-layout/periodic-table` | 球面 |
-| 360 | `draggable-playground` | 3D 拖拽 |
-
----
-
-## 9. 常见问题 → 跳到哪
-
-| 需求 | 跳到 |
-|---|---|
-| 我想做"卡片堆 3D 翻转入场" | §1 `onscroll-sticky` |
-| 我想做"标题字符逐字入场, 弹入-回弹-就位" | §2 `animejs-v4-logo-animation` (5 段 timeline) |
-| 我想做"持续在动的装饰背景" | §3 `layered-css-transforms` |
-| 我想做"1000 节点滚动揭示" | §5 `stagger` |
-| 我想做"路径描线 (雷达扫描/对勾绿)" | §4 `svg-line-drawing` |
-| 我想做"折线图/柱状图 grow" | §4 `svg-graph` |
-| 我想做"3D 球面/螺旋布局" | §1 `auto-layout/periodic-table` |
-| 我想做"鼠标跟随粒子" | §6 `animatable-follow-cursor` |
-| 我想做"拖拽+吸附" | §7 `draggable-mouse-scroll-snap-carousel` |
-| 我想做"Canvas 2D 大量粒子 (4000+)" | §3 `canvas-2d` |
-| 我想做"3D 拖拽物理" | §1 `draggable-playground` |
-| 我想做"自动布局切换" | §6 `auto-layout/todo-list` |
-| 我想用 Three.js 做真 3D | **不要用, 改 §1 CSS 3D 替代** — 详见 ANIMEJS-GUIDE.md §6 |
-| **我想画有质感的物体 (车/立方体/卡片)** | **§10 质感技法索引** |
-
----
-
-## 10. 质感技法索引 (按"想要什么质感"反向查)
-
-> **何时用**: 你画任何具体物体 (车/立方体/卡片/人形), 需要"有光影/有金属感/有毛玻璃/有描边"。**至少 1-2 种质感手法叠加, 不做单色 flat**。
-> **完整指南**: 详见 ANIMEJS-GUIDE.md §X (5 大共性含材质) + §X.3 质感基础套件 (CSS 套件直接套)。
-
-**8 种质感手法** (按"想要什么"反向查):
-
-| 想要什么 | 用什么手法 | animejs 官方例 | 关键 CSS |
-|---|---|---|---|
-| **金属反光** (车体/工具/立方体) | `linear-gradient(180deg, 浅 → 中 → 深)` | `clock-playback-controls` | `background: linear-gradient(180deg, #fafafa 0%, #d8d8d8 50%, #c0c0c0 100%);` |
-| **光晕/灯泡发光** (尾灯/光点) | `radial-gradient` + `box-shadow: 0 0 20px` | `additive-creature` | `background: radial-gradient(circle, rgba(255,200,100,0.8) 0%, transparent 70%); box-shadow: 0 0 20px rgba(255,200,100,0.6);` |
-| **卡片投影** (3D 卡片/工具卡) | `box-shadow` 多层 (近 + 远) | `onscroll-sticky`, `auto-layout/periodic-table` | `box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 16px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.6);` |
-| **远景物体深度** (车/树/远景) | `filter: drop-shadow()` | `onscroll-sticky` | `filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));` |
-| **粒子光晕融合** (萤火虫/烟雾) | `mix-blend-mode: plus-lighter` | `additive-fireflies` | `mix-blend-mode: plus-lighter; background: var(--red);` |
-| **路径描线 + 渐变填充** (雷达扫描/对勾绿) | `stroke-dasharray` + `fill: url(#gradient)` | `layered-css-transforms`, `svg-graph` | `stroke-dasharray: 600;` + `<linearGradient id="g">` |
-| **毛玻璃** (提示卡/弹出卡) | `backdrop-filter: blur()` + 半透明背景 | `onscroll-responsive-scope` | `background: rgba(20, 20, 40, 0.85); backdrop-filter: blur(8px);` |
-| **3D 卡片翻转** (物理演示卡) | `backface-visibility: hidden` + `rotateY(180deg)` | `onscroll-sticky` | `.front { backface-visibility: hidden; } .back { backface-visibility: hidden; transform: rotateY(180deg); }` |
-
-**8 种手法 ↔ 8 个 animejs 官方例 反向查**:
-
-| 想要什么 | 看哪个示例 | 关键文件 |
-|---|---|---|
-| 我想画**金属车体** | `clock-playback-controls` (3D 钟面) | `index.html` 钟面金属 gradient |
-| 我想画**光晕/烟雾** | `additive-creature` (13×13 网格) | `index.html` mix-blend-mode + 径向渐变 |
-| 我想画**3D 卡片堆** | `onscroll-sticky` (17 张卡片) | `index.html` 多层 box-shadow + backface-visibility |
-| 我想画**3D 旋转物体** | `onscroll-responsive-scope` (12 卡片) | `index.html` 多层 box-shadow + backdrop-filter |
-| 我想画**粒子萤火虫** | `additive-fireflies` (60 粒子) | `index.js` + `index.html` mix-blend-mode |
-| 我想画**路径描线 + 渐变** | `svg-graph` (折线图) | `index.html` linearGradient + mask |
-| 我想画**粒子 3D 网格** | `auto-layout/periodic-table` (sphere/helix) | `index.js` 200 行 + CSS box-shadow + 圆角 |
-| 我想画**钟面指针/旋转** | `clock-playback-controls` (3D 钟) | `index.html` 3D rotate + 透视 |
-
-**核心原则**:
-- **≥ 2 种手法叠加 = 有质感** (硬约束 #7 lint 必查)
-- **≥ 3 种手法叠加 = 优秀** (范例级)
-- **0-1 种 = 警告, 课件美感单薄**
-- 详见 ANIMEJS-GUIDE.md §X 完整指南 (含基础套件 CSS 8 块)
-
----
-
-## 11. License 与引用规范
-
-## 10. License 与引用规范
-
-- animejs 官方 License: **MIT** (允许自由使用 + 修改 + 商用, 需保留版权)
-- 本索引**仅引用**示例位置 + 适用场景, **不复制**完整代码到本仓库
-- LLM agent 需要看完整源码时, 通过 `github.com/juliangarnier/anime/blob/master/examples/<name>/index.js` 链接
-- LLM agent 写自己的章节时, **不要直接复制** animejs 官方代码 — 而是按"看完官方代码学范式" → 写自己的版本
-
----
-
-*索引版本 v1.0 — 25 个 animejs 官方示例, 按 8 大类 (CSS 3D / 字符级 / 流体 / SVG / Stagger / Timeline / 拖拽 / 其他) 分类速查。*
+按效果关键词反向查，例如想做卡片 3D 翻转就看卡片堆/3D 立体。示例名是查找锚点，API 以项目锁定的 `animejs@4.4.1` 为准。
+
+| 效果 | 示例名 | 核心 API | 适用场景 |
+| --- | --- | --- | --- |
+| 卡片堆 / 3D 翻转 | `onscroll-sticky` | `rotateY`、`rotateZ`、hover translateY | 多层卡片展示 |
+| 响应式 3D 卡片 | `onscroll-responsive-scope` | 3D transform + media query | 设备适配卡片 |
+| 钟面 / 仪表盘 | `clock-playback-controls` | timeline、easing | 时间和播放控制可视化 |
+| 3D 拖拽 | `draggable-playground` | `Draggable`、`rotateX/Y` | 物理拖拽和翻转 |
+| 球面 / 螺旋布局 | `auto-layout/periodic-table` | `createLayout` | 元素三维分布 |
+| 3D 卡片布局 | `auto-layout/cards` | `createLayout` | 卡片重排 |
+| 光晕粒子 | `additive-creature` | `mix-blend-mode` | 烟雾和发光物 |
+| 跟随粒子 | `additive-fireflies` | pointer interaction | 装饰性鼠标交互 |
+
+## 1. 字符与文本
+
+| 效果 | 示例名 | 核心 API | 适用场景 |
+| --- | --- | --- | --- |
+| 标题字符入场 | `animejs-v4-logo-animation` | stagger、timeline、SVG morph | 数字翻滚和词组拆解 |
+| 悬停文字 | `text/hover-effects` | `splitText` | 字符 hover |
+| 字符解密 | `text/scramble` | `scrambleText` | 数字和字符扰动 |
+| 多段入场 | `text/split-effects` | split + keyframes | 标题入场 |
+| 打字机 | `irregular-playback-typewriter` | irregular playback | 输入效果 |
+
+## 2. 持续动画与 SVG
+
+| 效果 | 示例名 | 核心 API | 适用场景 |
+| --- | --- | --- | --- |
+| 流体漂浮 | `layered-css-transforms` | keyframes、`createSpring` | 持续装饰动效 |
+| Canvas 粒子 | `canvas-2d` | RAF + JS object animation | 大量粒子 |
+| 无缝循环 | `timeline-seamless-loop` | timeline | 循环动画 |
+| 路径描线 | `svg-line-drawing` | `svg.createDrawable()` | 雷达、地图、对勾 |
+| 数据图 | `svg-graph` | SVG mask、drawable | 折线和柱状图 |
+| 网格错开 | `advanced-grid-staggering` | `stagger()` | 网格扫描 |
+
+## 3. Timeline、状态机与交互
+
+| 效果 | 示例名 | 核心 API | 适用场景 |
+| --- | --- | --- | --- |
+| 多阶段状态机 | `timeline-50K-stars` | `createTimeline`、composition | 性能和阶段切换 |
+| 动态重排 | `timeline-refresh-starlings` | `timeline.refresh()` | 运行时布局刷新 |
+| easing 选择 | `easings-visualizer` | easing comparison | 调试和选型 |
+| 鼠标跟随 | `animatable-follow-cursor` | `createAnimatable` | 跟随效果 |
+| 可排序列表 | `auto-layout/todo-list` | `createLayout` | 增删改排序 |
+| 手风琴 | `auto-layout/accordion` | layout animation | FAQ 和折叠面板 |
+| 拖拽轮播 | `draggable-infinite-auto-carousel` | `Draggable` | 横向轮播 |
+| 拖拽吸附 | `draggable-mouse-scroll-snap-carousel` | `Draggable` + snap | 拖拽和滚轮 |
+
+## 4. 与本模板的版本边界
+
+- `animejs@4.4.1` 是模板的唯一动画依赖版本；不要把 4.5 及以上的 Three.js adapter API 写入该模板。
+- 真 3D 需求优先用 CSS 3D，或在另一个经用户确认的项目中显式升级依赖与锁文件。
+- 用示例学习范式后，重写为课程自身的动画；不要复制整段官方示例代码。
+- 需要查看上游源码时，使用本地安装的精确 `animejs@4.4.1` 包或自行验证的 immutable release snapshot，不使用可变分支链接。
+
+## 5. License 与引用规范
+
+- Anime.js 为 MIT 许可；保留上游版权和许可要求。
+- 本索引只保留示例名称、API 方向和适用场景，不复制官方完整代码。
+- 课程章节必须遵守 `ANIMEJS-GUIDE.md` 的动画生命周期和可访问性约束。

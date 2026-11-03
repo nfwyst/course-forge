@@ -19,6 +19,11 @@ async function executable(path: string, source: string): Promise<void> {
   await chmod(path, 0o755);
 }
 
+function streamText(stream: ReadableStream<Uint8Array> | number | undefined): Promise<string> {
+  if (typeof stream === "number" || stream === undefined) return Promise.resolve("");
+  return new Response(stream).text();
+}
+
 async function output(process: Bun.Subprocess): Promise<{
   readonly exitCode: number;
   readonly stderr: string;
@@ -26,8 +31,8 @@ async function output(process: Bun.Subprocess): Promise<{
 }> {
   const [exitCode, stderr, stdout] = await Promise.all([
     process.exited,
-    new Response(process.stderr).text(),
-    new Response(process.stdout).text(),
+    streamText(process.stderr),
+    streamText(process.stdout),
   ]);
   return { exitCode, stderr, stdout };
 }
@@ -40,7 +45,7 @@ test("recording converts only the video created by its page", async () => {
   await mkdir(outputDirectory, { recursive: true });
   await mkdir(bin);
   await mkdir(playwright, { recursive: true });
-  await cp(join(repository, "scripts", "record.js"), join(fixture, "record.js"));
+  await cp(join(repository, "templates", "scripts", "record.js"), join(fixture, "record.js"));
   await writeFile(join(outputDirectory, "z-previous.webm"), "previous");
   await writeFile(join(playwright, "package.json"), JSON.stringify({
     name: "playwright", type: "module", exports: "./index.js",
@@ -54,6 +59,16 @@ test("recording converts only the video created by its page", async () => {
         return {
           async newPage() { return {
             async goto() {},
+            locator(selector) {
+              if (selector !== ".auto-gate") throw new Error("unexpected locator");
+              return {
+                async isVisible() { return true; },
+                async click() { await writeFile(process.env.COURSE_FORGE_GATE_CLICKED, "clicked"); },
+                async waitFor(options) {
+                  if (options.state !== "hidden") throw new Error("gate must become hidden");
+                },
+              };
+            },
             video() { return { async path() { return videoPath; } }; },
           }; },
           async close() { await writeFile(videoPath, "current"); },
@@ -69,21 +84,28 @@ for last; do :; done
 cp "$3" "$last"
 `);
   const selected = join(fixture, "selected.txt");
+  const gateClicked = join(fixture, "gate-clicked.txt");
   const result = await output(Bun.spawn([
     process.execPath, join(fixture, "record.js"),
-    "--headless", "--url", "http://127.0.0.1:1", "--duration", "1",
+    "--headless", "--url", "http://127.0.0.1:1", "--duration", "0",
     "--out", join(outputDirectory, "final.mp4"),
   ], {
-    env: { ...Bun.env, COURSE_FORGE_FFMPEG_INPUT: selected, PATH: `${bin}:${Bun.env.PATH}` },
+    env: {
+      ...Bun.env,
+      COURSE_FORGE_FFMPEG_INPUT: selected,
+      COURSE_FORGE_GATE_CLICKED: gateClicked,
+      PATH: `${bin}:${Bun.env.PATH}`,
+    },
     stderr: "pipe", stdout: "pipe",
   }));
   expect(result.exitCode, result.stderr).toBe(0);
+  expect(await readFile(gateClicked, "utf8")).toBe("clicked");
   expect((await readFile(selected, "utf8")).trim()).toEndWith("a-current.webm");
   expect(await readFile(join(outputDirectory, "z-previous.webm"), "utf8")).toBe("previous");
   expect(await readFile(join(outputDirectory, "final.mp4"), "utf8")).toBe("current");
 });
 
-test("audio compression preserves non-MP3 assets on macOS-compatible tools", async () => {
+test("audio compression preserves non-MP3 assets", async () => {
   const fixture = join(root, "compress");
   const audio = join(fixture, "audio");
   const bin = join(fixture, "bin");
@@ -110,12 +132,20 @@ printf compressed > "$last"
   expect(await readFile(join(audio, "keep.json"), "utf8")).toBe("metadata");
 });
 
-test("TTS help runs on macOS without Git Bash pwd", async () => {
+test("TTS help command exits successfully", async () => {
   const result = await output(Bun.spawn([
     "bash", join(repository, "templates", "scripts", "synthesize-audio.sh"), "--help",
   ], { stderr: "pipe", stdout: "pipe" }));
   expect(result.exitCode, result.stderr).toBe(0);
-  expect(result.stdout).toContain("provider-agnostic TTS runner");
+});
+
+test("TTS rejects provider path traversal before sourcing it", async () => {
+  const result = await output(Bun.spawn([
+    "bash", join(repository, "templates", "scripts", "synthesize-audio.sh"), "--provider=../../payload",
+  ], { stderr: "pipe", stdout: "pipe" }));
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("invalid TTS provider name");
 });
 
 test("course regeneration keeps project-root JSON as the only source", async () => {
@@ -134,10 +164,49 @@ test("course regeneration keeps project-root JSON as the only source", async () 
   expect(JSON.parse(await readFile(join(fixture, "course.json"), "utf8"))).toMatchObject({ courseId: "c" });
 });
 
-test("scaffold starts with no references to removed example chapters", async () => {
-  const source = await readFile(join(repository, "scripts", "scaffold.sh"), "utf8");
-  const match = source.match(/cat > course\.json <<'JSON'\n([\s\S]*?)\nJSON/);
-  expect(match).not.toBeNull();
-  const course: unknown = JSON.parse(match?.[1] ?? "null");
-  expect(course).toEqual({ courseId: "course", title: "待命名课程", outlineSegments: [] });
+test("scaffold creates a frozen installable project with its JSON guard", async () => {
+  const fixture = join(root, "scaffold");
+  const result = await output(Bun.spawn([
+    "bash", join(repository, "scripts", "scaffold.sh"), fixture, "--theme=blueprint",
+  ], { stderr: "pipe", stdout: "pipe" }));
+
+  expect(result.exitCode, result.stderr).toBe(0);
+  const packageJson = JSON.parse(await readFile(join(fixture, "package.json"), "utf8"));
+  expect(packageJson.dependencies.animejs).toBe("4.4.1");
+  expect(await Bun.file(join(fixture, "bun.lock")).exists()).toBe(true);
+  expect(await Bun.file(join(fixture, "scripts", "record.js")).exists()).toBe(true);
+  const guard = await output(Bun.spawn([
+    "bash", join(fixture, "scripts", "check-course-json-sync.sh"),
+  ], { cwd: fixture, stderr: "pipe", stdout: "pipe" }));
+  expect(guard.exitCode, guard.stderr).toBe(0);
+  expect(await readFile(join(fixture, "src", "styles", "tokens.css"), "utf8"))
+    .toBe(await readFile(join(repository, "themes", "blueprint", "tokens.css"), "utf8"));
+});
+
+test("subtitle timing falls back per missing step unless MiniMax is strict", async () => {
+  const fixture = join(root, "subtitle-timing");
+  const scriptDirectory = join(fixture, "scripts");
+  await mkdir(join(fixture, "public", "minimax-word-timing", "chapter"), { recursive: true });
+  await mkdir(scriptDirectory, { recursive: true });
+  await cp(join(repository, "templates", "scripts", "subtitle-timing.py"), join(scriptDirectory, "subtitle-timing.py"));
+  await writeFile(join(fixture, "audio-segments.json"), JSON.stringify([
+    { chapter: "chapter", step: 1, text: "first", audio: "chapter/1.mp3" },
+    { chapter: "chapter", step: 2, text: "second", audio: "chapter/2.mp3" },
+  ]));
+  await writeFile(join(fixture, "public", "minimax-word-timing", "chapter", "1.json"), JSON.stringify([
+    { text: "first", start_ms: 0, end_ms: 300 },
+  ]));
+
+  const fallback = await output(Bun.spawn([
+    "python3", join(scriptDirectory, "subtitle-timing.py"), "--chapters", "chapter",
+  ], { cwd: fixture, stderr: "pipe", stdout: "pipe" }));
+  expect(fallback.exitCode, fallback.stderr).toBe(0);
+  const timing = JSON.parse(await readFile(join(fixture, "public", "subtitle-timing.json"), "utf8"));
+  expect(timing.chapter["0"][0].text).toBe("first");
+  expect(timing.chapter["1"][0].text).toBe("second");
+
+  const strict = await output(Bun.spawn([
+    "python3", join(scriptDirectory, "subtitle-timing.py"), "--strict-minimax", "--chapters", "chapter",
+  ], { cwd: fixture, stderr: "pipe", stdout: "pipe" }));
+  expect(strict.exitCode).not.toBe(0);
 });

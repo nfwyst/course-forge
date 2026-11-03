@@ -2,50 +2,20 @@
 # ────────────────────────────────────────────────────────────────────
 # synthesize-audio.sh — provider-agnostic TTS runner.
 #
-# Reads audio-segments.json (produced by extract-narrations.ts) and
-# writes one mp3 per segment under public/audio/<chapter>/<N>.mp3.
+# Reads audio-segments.json and writes one mp3 per segment under
+# public/audio/<chapter>/<N>.mp3. A provider exposes tts_synthesize,
+# optionally tts_check and tts_install_help.
 #
-# This file itself does NOT know how to call any TTS engine. It loads
-# a provider adapter from tts-providers/<name>.sh which must expose:
-#
-#   tts_synthesize <text> <out_path> [<voice>]   (required)
-#   tts_check                                    (optional)
-#   tts_install_help                             (optional)
-#
-# See tts-providers/README.md for the full contract and copy-pasteable
-# recipes for adding more providers (OpenAI / ElevenLabs / edge-tts /
-# Azure / etc.).
-#
-# Choosing a provider:
-#   PRESENTATION_TTS=<name>       env var  (default: edge — 免费 / 零密钥)
-#   --provider=<name>             CLI flag (overrides env)
-#   推荐 edge-tts：微软后端、无需 API key，开箱即用（见 tts-providers/README.md）
-#
-# Choosing a voice (provider decides what's valid):
-#   PRESENTATION_TTS_VOICE=<id>   env var
-#   --voice=<id>                  CLI flag (overrides env)
-#
-# Other flags:
-#   --force                       re-synthesize even if mp3 exists
-#
-# Behavior:
-#   • Serial calls (TTS APIs commonly rate-limit parallel requests).
-#   • 断点续传：仅跳过"已存在且非空"的 mp3；0 字节残 file 视为失败并重合成。
-#   • 失败段自动重试（最多 3 次，指数退避 2s/4s），单次网络抖动不再中断整轮。
-#   • Pass --force to re-synthesize all.
-#   • Prints progress per segment with elapsed time.
-#
-# Examples:
-#   npm run synthesize-audio
-#   npm run synthesize-audio -- --force
-#   PRESENTATION_TTS=openai npm run synthesize-audio
-#   npm run synthesize-audio -- --provider=elevenlabs --voice=Rachel
+# Options:
+#   --provider=<name>             override PRESENTATION_TTS (default: edge)
+#   --voice=<id>                  override PRESENTATION_TTS_VOICE
+#   --chapters=id1,id2            synthesize only comma-separated chapter IDs
+#   --chapters id1 id2            synthesize only space-separated chapter IDs
+#   --force                       replace non-empty audio files
 # ────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Git Bash needs a Windows path for native .exe tools. macOS, Linux and WSL
-# use the portable physical path; their `pwd` does not support `-W`.
 if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
   ROOT="$(cd "$SCRIPT_DIR/.." && pwd -W)"
 else
@@ -54,83 +24,118 @@ fi
 SEGMENTS="$ROOT/audio-segments.json"
 OUT_DIR="$ROOT/public/audio"
 PROVIDERS_DIR="$SCRIPT_DIR/tts-providers"
-
 PROVIDER="${PRESENTATION_TTS:-edge}"
 VOICE="${PRESENTATION_TTS_VOICE:-}"
+CHAPTERS=""
 FORCE=false
 
-for arg in "$@"; do
-  case "$arg" in
-    --force)         FORCE=true ;;
-    --voice=*)       VOICE="${arg#--voice=}" ;;
-    --provider=*)    PROVIDER="${arg#--provider=}" ;;
+append_chapter() {
+  local chapter="$1"
+  CHAPTERS="${CHAPTERS}${CHAPTERS:+,}${chapter}"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force)
+      FORCE=true
+      shift
+      ;;
+    --voice=*)
+      VOICE="${1#--voice=}"
+      shift
+      ;;
+    --provider=*)
+      PROVIDER="${1#--provider=}"
+      shift
+      ;;
+    --chapters=*)
+      CHAPTERS="${1#--chapters=}"
+      shift
+      ;;
+    --chapters)
+      shift
+      if [[ $# -eq 0 || "$1" == --* ]]; then
+        echo "✗ --chapters needs at least one chapter ID" >&2
+        exit 1
+      fi
+      while [[ $# -gt 0 && "$1" != --* ]]; do
+        append_chapter "$1"
+        shift
+      done
+      ;;
     -h|--help)
-      sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
-    *) echo "✗ unknown arg: $arg" >&2; exit 1 ;;
+    *)
+      echo "✗ unknown arg: $1" >&2
+      exit 1
+      ;;
   esac
 done
 
+if [[ ! "$PROVIDER" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
+  echo "✗ invalid TTS provider name: $PROVIDER" >&2
+  exit 1
+fi
 PROVIDER_FILE="$PROVIDERS_DIR/$PROVIDER.sh"
-
-# ── Pre-flight ────────────────────────────────────────────────────────
 if [[ ! -f "$SEGMENTS" ]]; then
-  echo "✗ $SEGMENTS not found. Run: npm run extract-narrations" >&2
+  echo "✗ $SEGMENTS not found. Run: bun run extract-narrations" >&2
   exit 1
 fi
 if ! command -v jq >/dev/null; then
   echo "✗ jq is required to read audio-segments.json" >&2
-  echo "  Install: brew install jq   (or apt-get install jq, etc.)" >&2
+  echo "  Install jq with your operating system's package manager." >&2
   exit 1
 fi
 if [[ ! -f "$PROVIDER_FILE" ]]; then
   echo "✗ TTS provider '$PROVIDER' not found at $PROVIDER_FILE" >&2
-  echo >&2
   echo "  Available providers:" >&2
-  for f in "$PROVIDERS_DIR"/*.sh; do
-    [[ -f "$f" ]] || continue
-    echo "    • $(basename "$f" .sh)" >&2
+  for file in "$PROVIDERS_DIR"/*.sh; do
+    [[ -f "$file" ]] || continue
+    echo "    • $(basename "$file" .sh)" >&2
   done
-  echo >&2
-  echo "  To add your own, see $PROVIDERS_DIR/README.md" >&2
   exit 1
 fi
 
 # shellcheck source=/dev/null
 source "$PROVIDER_FILE"
-
 if ! declare -F tts_synthesize >/dev/null; then
   echo "✗ provider '$PROVIDER' does not define tts_synthesize" >&2
-  echo "  See $PROVIDERS_DIR/README.md for the contract." >&2
+  exit 1
+fi
+if declare -F tts_check >/dev/null && ! tts_check; then
+  if declare -F tts_install_help >/dev/null; then
+    tts_install_help
+  fi
   exit 1
 fi
 
-if declare -F tts_check >/dev/null; then
-  if ! tts_check; then
-    echo >&2
-    if declare -F tts_install_help >/dev/null; then
-      tts_install_help
-    fi
-    exit 1
-  fi
-fi
-
-# ── Main loop ─────────────────────────────────────────────────────────
-total=$(jq 'length' "$SEGMENTS")
+selected_rows=$(jq -c --arg chapters "$CHAPTERS" '
+  .[] | select(
+    $chapters == "" or
+    (.chapter as $chapter | ($chapters | split(",") | index($chapter)))
+  )
+' "$SEGMENTS")
+total=$(printf '%s\n' "$selected_rows" | jq -s 'length')
 i=0
 synthesized=0
 skipped=0
 failed=0
 
 while IFS= read -r row; do
+  [[ -n "$row" ]] || continue
   i=$((i + 1))
-  chapter=$(echo "$row" | jq -r '.chapter')
-  step=$(echo "$row" | jq -r '.step')
-  text=$(echo "$row" | jq -r '.text')
+  chapter=$(printf '%s' "$row" | jq -r '.chapter')
+  step=$(printf '%s' "$row" | jq -r '.step')
+  text=$(printf '%s' "$row" | jq -r '.text')
+  if [[ ! "$chapter" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$chapter" == *..* ||
+        ! "$step" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || "$step" == *..* ]]; then
+    echo "✗ unsafe audio segment path: chapter=$chapter step=$step" >&2
+    exit 1
+  fi
   out="$OUT_DIR/$chapter/$step.mp3"
 
-  # 断点续传：仅当 mp3 存在且"非空"才跳过；0 字节残 file 视为失败，重合成。
   if [[ -s "$out" && "$FORCE" != true ]]; then
     skipped=$((skipped + 1))
     printf "[%3d/%d] %-20s skip (exists)\n" "$i" "$total" "$chapter/$step.mp3"
@@ -138,34 +143,17 @@ while IFS= read -r row; do
   fi
 
   mkdir -p "$(dirname "$out")"
-  # 逐段失败自动重试（edge-tts / 网络偶发失败），最多 3 次，指数退避。
-  attempt=0
-  max_attempts=3
-  ok=false
-  while [[ $attempt -lt $max_attempts ]]; do
-    attempt=$((attempt + 1))
-    start=$(date +%s)
-    if tts_synthesize "$text" "$out" "$VOICE"; then
-      ok=true
-      break
-    fi
-    # 失败：清掉可能写出的残 file，避免下一轮被当成"已存在"跳过
-    [[ -f "$out" ]] && rm -f "$out"
-    if [[ $attempt -lt $max_attempts ]]; then
-      printf "[%3d/%d] %-20s ✗ retry %d/%d\n" "$i" "$total" "$chapter/$step.mp3" "$attempt" "$max_attempts" >&2
-      sleep $((attempt * 2))   # 2s, 4s 退避
-    fi
-  done
-
-  if [[ "$ok" == true ]]; then
+  start=$(date +%s)
+  if tts_synthesize "$text" "$out" "$VOICE"; then
     elapsed=$(( $(date +%s) - start ))
     synthesized=$((synthesized + 1))
     printf "[%3d/%d] %-20s ✓ %ss\n" "$i" "$total" "$chapter/$step.mp3" "$elapsed"
   else
     failed=$((failed + 1))
-    printf "[%3d/%d] %-20s ✗ FAILED (gave up after %d)\n" "$i" "$total" "$chapter/$step.mp3" "$max_attempts" >&2
+    rm -f "$out"
+    printf "[%3d/%d] %-20s ✗ FAILED\n" "$i" "$total" "$chapter/$step.mp3" >&2
   fi
-done < <(jq -c '.[]' "$SEGMENTS")
+done <<< "$selected_rows"
 
 echo
 echo "✓ done (provider=$PROVIDER) — synthesized $synthesized, skipped $skipped, failed $failed"

@@ -1,314 +1,109 @@
-# 音频合成
+# 音频合成与字幕
 
-把每个章节 `narrations.ts` 里的口播文字按 **step 颗粒度**合成 mp3，
-落到 `presentation/public/audio/<chapter-id>/<step-N>.mp3`。运行时
-Auto 模式会自动按 step 播放并自动推进——录屏可以一镜到底。
-
-> **真相源**：每个章节的 `src/chapters/<NN>-<id>/narrations.ts` 是 step
-> 数 + 口播文本的**唯一来源**。`outline.md` 不再参与音频合成，章节代码
-> 也不再手写 `totalSteps`。这一改根除了"网页 step 和音频文件数对不上"
-> 这个老问题。
-
-合成器是 **provider-agnostic** 的：runner 本身不绑定任何 TTS 后端，每个
-后端是 `scripts/tts-providers/<name>.sh` 一个文件。**内置 3 个 provider**
-（脚手架已随项目一起拷贝到 `scripts/tts-providers/`）：
-
-| Provider | 默认 | 何时用 |
-|---|---|---|
-| `minimax` | ✓ | 中文口播首选（直接 curl，要 `MINIMAX_API_KEY`） |
-| `openai`  | —— | 多数 agent 已有 `OPENAI_API_KEY`；curl-based、响应快 |
-| `edge`    | —— | **零 key 免费 fallback**：`pip install edge-tts` 即可，无 API key、无额外 CLI；中文音色自然（默认 `zh-CN-YunxiNeural`）。没 minimax / openai key 时直接用它 |
-
-换 / 加 provider 见
-[`scripts/tts-providers/README.md`](../scripts/tts-providers/README.md)
-（脚手架跑完后路径是 `presentation/scripts/tts-providers/README.md`）。
-README 里还附了 5 套**可粘贴**的现成片段（ElevenLabs / edge-tts / macOS say /
-Azure / Google Cloud）和写自定义 provider 的三函数契约。
-
----
-
-## 文件命名约定
-
-```
-presentation/public/audio/
-├── coldopen/
-│   ├── 1.mp3
-│   ├── 2.mp3
-│   └── ...
-├── hook/
-│   └── ...
-└── ...
-```
-
-- 章节子目录名 = `chapters.ts` 里的 `id`
-- 文件名 = `<step-N>.mp3`（**1-indexed**，对齐 narrations 数组的 index + 1）
-- 格式默认 mp3。如果你写的 provider 只能出 wav，在函数里加一步 `ffmpeg`
-  转 mp3（参见 `tts-providers/README.md` 的 `say.sh` 示例）
-
----
+每个章节的 `narrations.ts` 是口播文字和 step 数的唯一来源。流程按 step
+生成 `public/audio/<chapter-id>/<step>.mp3`，再生成
+`public/subtitle-timing.json`。运行时 Auto 模式会按音频 `ended` 推进；缺音频时
+才按文字长度估时，便于未合成音频的预览。
 
 ## 标准流程
 
-### 1. 抽取 segments
-
 ```bash
 cd presentation
-npm run extract-narrations
+bun install --frozen-lockfile
+bun run extract-narrations
+bun run synthesize-audio
+bun run subtitle-timing
 ```
 
-这会扫所有章节的 `narrations.ts`，按 `chapters.ts` 注册顺序生成
-`audio-segments.json`：
+`extract-narrations` 生成 `audio-segments.json`。先检查文本与 chapter ID，再进行
+需要网络和费用的 TTS 合成。
 
-```json
-[
-  { "chapter": "coldopen", "step": 1, "text": "...", "audio": "coldopen/1.mp3" },
-  { "chapter": "coldopen", "step": 2, "text": "...", "audio": "coldopen/2.mp3" },
-  ...
-]
-```
+## Provider
 
-让用户**先扫一眼这个 json**，确认文本和切分都对，再开始烧 token 合成。
+| Provider | 默认 | 鉴权 | 场景 |
+| --- | :---: | --- | --- |
+| `edge` | 是 | 无 | 零 key 的本地开发和中文预览 |
+| `minimax` | 否 | `MINIMAX_API_KEY` | MiniMax 音质和逐词字幕 |
+| `openai` | 否 | `OPENAI_API_KEY` | 现有 OpenAI 兼容端点 |
 
-> 空字符串的 narration 会被自动跳过（不烧 TTS token）——运行时 Auto 模式
-> 按字数估时撑过这种"无声过场"step。
-
-### 2. 选 provider
+切换 provider：
 
 ```bash
-ls scripts/tts-providers/    # 看本项目带了哪些
+PRESENTATION_TTS=minimax bun run synthesize-audio
+PRESENTATION_TTS=openai bun run synthesize-audio -- --voice=nova
 ```
 
-- 用默认 `minimax` → 走 [2.A](#2a-用内置-minimax-合成)
-- 用内置 `openai` → 走 [2.B](#2b-用内置-openai-合成)
-- 想用别的 TTS / 自带 TTS → 走 [2.C](#2c-换-provider--加自定义-provider)
-- 一个都没装好 → 走 [2.D](#2d-退化路径)
+### Edge（默认）
 
-#### 2.A 用内置 minimax 合成
+隔离安装，避免更改系统 Python：
 
 ```bash
-npm run synthesize-audio              # 增量：跳过已存在的 mp3
-npm run synthesize-audio -- --force   # 全部重合成
-npm run synthesize-audio -- --voice=<voice-id>  # 指定音色
+uv tool install edge-tts
+uv tool update-shell
+edge-tts --list-voices
 ```
 
-> **Windows / Git-Bash 注意**：`npm run synthesize-audio` 的子进程可能不继承 `export PATH`
-> （如 venv 的 Scripts 目录）。若 `tts_check` 报 "not found" 但你确认已装，改用直接调用：
-> `export PATH="/c/path/to/venv/Scripts:$PATH" && bash scripts/synthesize-audio.sh --provider=edge`。
-> Git-Bash 的 `command -v` 需 `/c/` 格式 PATH（`C:/` 格式找不到 .exe）。edge provider 也支持
-> `export EDGE_TTS_BIN=/c/path/to/edge-tts.exe` 直接指定路径，或 fallback 到 `python -m edge_tts`。
-
-启动时 runner 会先调 provider 的 `tts_check`（针对 minimax 是检查 `MINIMAX_API_KEY` 是否已设置），缺啥报啥。修完再跑。每条段打印进度：
-
-```
-[  3/24] coldopen/3.mp3   ✓ 4s
-[  4/24] coldopen/4.mp3   skip (exists)
-```
-
-合成串行（避免 rate limit），**自动跳过已存在文件**（断点续合，不烧
-重复 token）。
-
-> **限时处理指定章节**：用 `--chapters` 参数只合成指定 ID 的章节，
-> 跳过其他章节。用于开发中只合成新增章节，避免遍历全部已有文件：
->
-> ```bash
-> npm run synthesize-audio -- --chapters=a1-role-models,a1-coding-in-life,a1-first-project
-> ```
-
-#### 2.5 字幕时序（三种模式）
-
-合成音频后需生成字幕时序文件 `public/subtitle-timing.json`：
-
-**默认：minimax（MiniMax 逐词时间戳）**
-
-- MiniMax TTS 合成时已请求 `subtitle_type: "word"`，每个字的起止 ms 自动存入 `public/minimax-word-timing/<chapter>/<step-N>.json`
-- `--mode minimax` 按词级 ms 聚合生成字幕块，字级精准对齐
-- 精度 ⭐⭐⭐⭐⭐，**新合成章节首选**
-- 适用：所有用内置 MiniMax provider 合成的章节
-
-**fallback 1：default（80字句界 + 字数占比分配 + ffprobe）**
-
-- 将每步口播文本按 80 字句界切分为多个字幕块
-- 每个字幕块的显示时长 = mp3 总时长 × (该块字数 / 该步总字数)
-- mp3 总时长由 ffprobe 实测
-- 精度 ⭐⭐⭐，**零成本、始终可用**
-- 适用：minimax 模式无词级数据时（`speech-2.8-hd` 偶发），或非 MiniMax provider 合成的章节
-
-**fallback 2：whisper（未来可选）**
-
-- `whisper --word_timestamps True audio.mp3` 离线转写 + 对齐任意音频
-- 适用于非 MiniMax 合成的音频，或 minimax 模式无词级数据时的兜底增强
+重开 shell 后再运行合成。若 edge-tts 安装在项目虚拟环境中，显式传入其路径：
 
 ```bash
-# 默认（★ 推荐）— MiniMax 词级 ms，自动 fallback 到 default
-python3 scripts/subtitle-timing.py
-
-# 显式指定 minimax（行为同上）
-python3 scripts/subtitle-timing.py --mode minimax
-
-# 显式指定 default（字数占比 + ffprobe）
-python3 scripts/subtitle-timing.py --mode default
-
-# 加 --chapters 过滤（避免全量扫描超时）
-python3 scripts/subtitle-timing.py --chapters id1 id2
+export EDGE_TTS_BIN=/absolute/path/to/.venv/bin/edge-tts
 ```
 
-> **行为**：脚本默认尝试 minimax；遇到某章节无 `minimax-word-timing/` 数据时
-> 自动降级为 default 并打印 warning，**不会报错中断**——一次跑完全部章节。
+默认声线是 `zh-CN-YunxiNeural`；用
+`PRESENTATION_EDGE_VOICE=zh-CN-XiaoxiaoNeural` 覆盖。
 
-| 模式 | 时长分配方式 | 总时长来源 | 精度 | 适用 |
-|:--|:--|:--|:--:|:--|
-| minimax（默认） | 按 API 逐词 ms 聚合到块 | MiniMax API | ⭐⭐⭐⭐⭐ | MiniMax 合成章节 |
-| default（fallback） | 每块时长 = 总时长 × (块字数 / 步总字数) | ffprobe 实测 mp3 | ⭐⭐⭐ | 非 MiniMax / 兜底 |
-| whisper（未来可选） | 按 ASR 逐词 ms 聚合到块 | Whisper 转写 | ⭐⭐⭐⭐ | 未来可选 |
-
-#### 2.B 用内置 openai 合成
+### MiniMax
 
 ```bash
-export OPENAI_API_KEY=sk-...                   # 在 platform.openai.com 拿
-PRESENTATION_TTS=openai npm run synthesize-audio
-# 换音色 + HD 模型
-OPENAI_TTS_MODEL=tts-1-hd PRESENTATION_TTS=openai \
-  npm run synthesize-audio -- --voice=nova
+export MINIMAX_API_KEY=<your-token-plan-key>
+PRESENTATION_TTS=minimax bun run synthesize-audio
 ```
 
-可选 env：
+MiniMax provider 以固定 Python 代码从 argv 构建请求，并使用环境变量中的 key；
+不会把文本、model、voice 或输出路径插入 Python 源码。返回的逐词时序写入
+`public/minimax-word-timing/<chapter>/<step>.json`。
 
-| 变量 | 默认 | 作用 |
-|---|---|---|
-| `OPENAI_API_KEY` | —— **必须** | API key |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | 切代理 / Azure-OpenAI |
-| `OPENAI_TTS_MODEL` | `tts-1` | `tts-1` 快 / `tts-1-hd` 高质量约 2× 价 |
-| `--voice=` / `PRESENTATION_TTS_VOICE` | `alloy` | 可选 alloy / echo / fable / onyx / nova / shimmer |
+### 只合成改动章节
 
-`tts_check` 会检查 curl / jq / `OPENAI_API_KEY` 三件套，缺哪个报哪个。
-
-#### 2.C 换 provider / 加自定义 provider
-
-内置之外的常见后端在 `scripts/tts-providers/README.md` 里有 5 段
-**可粘贴**代码片段（ElevenLabs / edge-tts / macOS `say` / Azure / Google
-Cloud）。
-
-挑一个 → 复制 README 里的代码块 → 保存为
-`scripts/tts-providers/<name>.sh` → 设好环境变量 → 切换 provider 跑：
+`--chapters` 支持空格或逗号分隔，且只处理指定章节：
 
 ```bash
-PRESENTATION_TTS=elevenlabs npm run synthesize-audio
-# 或
-npm run synthesize-audio -- --provider=edge
+bun run synthesize-audio -- --chapters intro practice
+bun run synthesize-audio -- --chapters=intro,practice
 ```
 
-如果用户的 TTS 完全自研，**按三函数契约**写一个 `<name>.sh` 即可：
+已存在的非空 mp3 会跳过；传 `--force` 才重新合成。
 
-| 函数 | 必需 | 作用 |
-|---|---|---|
-| `tts_synthesize <text> <out_path> [<voice>]` | ✓ | 把一段文字写成 mp3 到指定路径 |
-| `tts_check` | 可选 | 启动时校验环境（CLI / key / auth），未就绪 return 非零 |
-| `tts_install_help` | 可选 | `tts_check` 失败时打印怎么修 |
-
-抄 `openai.sh`（HTTP-based）或 `minimax.sh`（CLI-based）起手最快。
-详细规范在 `scripts/tts-providers/README.md`。
-
-#### 2.D 退化路径
-
-如果两个内置 provider 都没就绪（没设 `MINIMAX_API_KEY` 也没有 `OPENAI_API_KEY`）告诉用户：
-
-```
-我可以：
-
-  1. 用内置 openai provider（如果你已有 OpenAI key）
-     export OPENAI_API_KEY=sk-...
-     PRESENTATION_TTS=openai npm run synthesize-audio
-
-  2. 用内置 minimax provider（默认，中文音色更稳；只需要 API key）
-     export MINIMAX_API_KEY=sk-xxxxx     # 在 https://platform.minimaxi.com 获取
-     npm run synthesize-audio            # 不需要任何额外 CLI 工具
-
-  3. 换其它 provider
-     scripts/tts-providers/README.md 里有 5 种现成代码片段：
-       • ElevenLabs  (要 ELEVENLABS_API_KEY，英文音色最佳)
-       • edge-tts    (免费 / 无 key / pip install edge-tts)
-       • macOS say   (零依赖离线，质量一般，适合预览)
-       • Azure       (要 AZURE_SPEECH_KEY)
-       • Google      (要 gcloud auth)
-     复制一段保存成 tts-providers/<name>.sh，
-     再 PRESENTATION_TTS=<name> npm run synthesize-audio
-
-  4. 暂时跳过
-     稿子和 narrations 都在，你自己用任意 TTS 录制即可——文件
-     按 audio-segments.json 的 audio 字段命名就行。
-```
-
-不要假装合成成功。
-
----
-
-## 校验时长
-
-合成完后跑：
+## 字幕时序
 
 ```bash
-for f in public/audio/*/*.mp3; do
-  d=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$f")
-  echo "$f  ${d}s"
-done
+bun run subtitle-timing
+bun run subtitle-timing -- --chapters intro practice
+bun run subtitle-timing -- --strict-minimax --chapters intro
+bun run subtitle-timing -- --mode default
 ```
 
-把每条的实际秒数汇总告诉用户。**重点关注 ≥ 15s 的条目**——口播太长意味
-着该 step 的 narration 写得过密，或者 step 没拆够。让用户决定**改稿子
-重合**还是**回章节代码拆 step**。
+默认是 MiniMax 优先：每个有逐词文件的 step 用精确时序；**每个缺失或无效的
+step 独立回退**到默认按字数分配，不会因为同章另一 step 有数据而漏字幕。
+`--strict-minimax` 才会在任一请求 step 缺逐词数据时失败。`--mode default`
+强制全部使用 `ffprobe` 实测音频长度；没有本地音频时以文字长度估时。
 
----
-
-## 运行时如何使用合成的音频
-
-合成完成后，**不需要任何额外配置**——脚手架的 `App.tsx` 已经接好：
-
-| 模式 | 触发方式 | 行为 |
-|---|---|---|
-| **Manual**（默认） | 直接打开页面 | 不播音频，点击 / 方向键推进 |
-| **Audio**（半自动） | URL `?audio=1` 或按 `M` 键 | 进入 step 自动播音频，但你手动推进（点鼠标） |
-| **Auto**（全自动） | URL `?auto=1` 或按两次 `M` 键 | 进入 step 播音频 → 播完自动 next() → 进下个 step → ... |
-
-Auto 模式首次需要按一次 `Space` 启动（绕过浏览器自动播放限制），之后
-全自动跑。**录屏时打开屏幕录制 → 按 Space → 整片自动跑完 → stop**。
-
-> **Auto 模式的推进规则就一句话**：每段音频播完 + 200ms 缓冲 → 自动 next。
-> **没有"等动画跑完"的兜底**——如果你写的视觉动画比口播长，会被当场切。
-> 解决办法：写更长口播 / 拆 step / 调动画速度（详见
-> [`CHAPTER-CRAFT.md`](CHAPTER-CRAFT.md) 「代码层最小约束」）。
->
-> 音频文件缺失（还没合成 / 404）或 narration 是空串 → 退化到字数估时
-> （`max(1500ms, 字数 × 250ms)`），保证预览也能整片跑通。
-
----
+| 模式 | 行为 |
+| --- | --- |
+| 默认 / `--mode minimax` | MiniMax 逐词数据优先，缺失 step 自动回退 |
+| `--strict-minimax` | 任一请求 step 缺逐词数据即失败 |
+| `--mode default` | 始终使用句界和音频长度/文字长度 |
 
 ## 故障排查
 
-通用：
+| 现象 | 处理 |
+| --- | --- |
+| `audio-segments.json not found` | 先运行 `bun run extract-narrations` |
+| `edge-tts not found` | 使用上述 `uv tool install edge-tts`，或设置 `EDGE_TTS_BIN` |
+| provider 缺 API key | 在当前 shell 设置对应环境变量，不能提交到仓库 |
+| 单段合成失败 | 修复 provider 后重跑；已有成功 mp3 会跳过 |
+| Auto 模式没有音频 | 确认 URL 是 `?auto=1`，并首次按 Space 授予浏览器播放权限 |
+| 字幕无精确时序 | 默认会显示回退字幕；需要强制精确数据时加 `--strict-minimax` |
 
-| 现象 | 原因 / 修法 |
-|---|---|
-| `chapter id "X" registered but no matching folder found` | 章节文件夹应命名为 `NN-<id>`；id 必须等于 chapters.ts 里注册的 |
-| `narrations.ts in X must export an array named "narrations"` | 该章节的 narrations.ts 没 export 名为 narrations 的数组 |
-| `TTS provider 'X' not found` | `scripts/tts-providers/X.sh` 不存在；列出来看哪些可用，或抄 README 加一个 |
-| `provider 'X' does not define tts_synthesize` | 你的 `<X>.sh` 没定义必需的函数。看 README 的契约部分 |
-| 中间断了几条没合成 | `npm run synthesize-audio` 重跑 —— 已存在文件会跳过 |
-| 浏览器没播音频 | Auto / Audio 模式下首次需要用户手势——确认你按了 SPACE 启动 Auto，或者点过页面 |
-| 音频 404 但 Auto 模式还能跑 | 找不到 mp3 时 useAudioPlayer 退化到字数估时（4 字/秒），保证预览不中断 |
-| **HTTP 429 / "rate limit exceeded"** | **通用限流**：等 60s 后重跑，runner 自动跳过已合成；不要换 provider / 改 endpoint |
-| **错误码 1002 (RPM) / 1039 (TPM)** | **通用限流**：每分钟请求/token 超限，等 60s 后重试 |
-
-**自定义 provider 之后**：
-
-| 现象 | 原因 / 修法 |
-|---|---|
-| `<X>_API_KEY not set` | 你的 provider 需要 API key，但 env 里没设。`export <X>_API_KEY=...` 或写到 `.env` 再 `set -a; source .env; set +a` |
-| 合成的 mp3 浏览器播不了 | 检查 provider 是否真的出了 mp3（不是 wav / opus / aac）。`file public/audio/*/*.mp3` 看 magic header |
-| 一切看起来都对，但全部 FAILED | `bash -x scripts/synthesize-audio.sh` 看每段实际调了什么 |
-
----
-
-## 相关链接
-
-- Provider 契约 + 现成片段：[`scripts/tts-providers/README.md`](../scripts/tts-providers/README.md)
-- 验收时长统计：[`chapter-stats.py`](../scripts/chapter-stats.py)
+自定义 provider 的三函数契约见
+[`scripts/tts-providers/README.md`](../scripts/tts-providers/README.md)。

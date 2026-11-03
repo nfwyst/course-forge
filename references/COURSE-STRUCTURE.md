@@ -134,8 +134,8 @@
 
 ## 6. 多课程管理（`?course=` 路由）
 
-- `?course=kids-coding-ai` → `useCourseLoader` 拉 `/course-kids-coding-ai.json`
-- 无 `?course=` → fallback `/course.json`（默认课）
+- `?course=kids-coding-ai` → `useCourseLoader` 从构建期 `import.meta.glob` 注册表选择 `course-kids-coding-ai.json`
+- 无 `?course=` → fallback 到项目根 `course.json`（默认课）
 - `useStepper` 的 localStorage key 含 `courseId` 命名空间（`cf-cursor-<courseId>-v4`），多课不互覆盖
 - 多课共享 `templates/src/` 的 chrome 组件 + 主题，每个 `course-<id>.json` 是数据文件
 

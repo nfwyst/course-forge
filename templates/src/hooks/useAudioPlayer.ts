@@ -3,139 +3,97 @@ import { useEffect, useRef } from "react";
 export type PlaybackMode = "manual" | "audio" | "auto";
 
 interface Options {
-  /** Audio file path. `null` = no audio for this step (silent). */
-  src: string | null;
-  /** `manual` = no playback. `audio` = play but don't auto-advance.
-   *  `auto` = play and auto-advance when finished. */
-  mode: PlaybackMode;
-  /** Small breathing pad (ms) after audio finishes before advancing,
-   *  in `auto` mode. Default 200ms. Set to 0 if mp3 already has trailing
-   *  silence. */
-  trailMs?: number;
-  /** Fallback duration (ms) for `auto` mode when the audio file is missing
-   *  or fails to play. Typically computed from text length. */
-  estimateFallbackMs?: number;
-  /** Called when `auto` mode determines the step is finished. */
-  onAutoAdvance: () => void;
-  /** Has the user started auto playback? (Browsers block autoplay until
-   *  the page receives a user gesture; the AutoStartGate flips this.) */
-  autoStarted: boolean;
-  /** Pause the audio (and, in auto mode, hold auto-advance). The parent
-   *  also gates `onAutoAdvance` so auto-advance never fires while paused. */
-  paused?: boolean;
+  readonly src: string | null;
+  readonly mode: PlaybackMode;
+  readonly autoStarted: boolean;
+  readonly onAutoAdvance: () => void;
+  readonly onTimeUpdate?: (elapsedMs: number) => void;
+  readonly paused?: boolean;
+  readonly trailMs?: number;
+  readonly estimateFallbackMs?: number;
 }
 
-/**
- * Per-step audio playback for the presentation.
- *
- * Manages a single hidden `<audio>` element. Switches `src` whenever the
- * current step changes.
- *
- * In `auto` mode:
- *   • Audio file present → advance `trailMs` after the audio's `ended` event.
- *   • Audio file missing / blocked / src = null → advance after
- *     `estimateFallbackMs` (so previews and silent steps still work).
- *
- * Audio playback is the sole driver of step duration — there is intentionally
- * no "minimum hold" knob. If a chapter's visual animation needs more time,
- * the chapter should write longer narration, split the step, or speed the
- * animation up. This keeps Auto-mode behavior trivially predictable.
- *
- * The `paused` flag is honored by (a) pausing the audio element when it
- * transitions to true, and (b) not firing the auto-advance timer when
- * the user has paused. The parent still gates `onAutoAdvance` so manual
- * click + Stage tap also stop advancing while paused.
- */
 export function useAudioPlayer({
   src,
   mode,
+  autoStarted,
+  onAutoAdvance,
+  onTimeUpdate,
+  paused = false,
   trailMs = 200,
   estimateFallbackMs = 1500,
-  onAutoAdvance,
-  autoStarted,
-  paused = false,
 }: Options) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Latest callback ref so timers don't capture stale closures.
   const onAdvanceRef = useRef(onAutoAdvance);
-  onAdvanceRef.current = onAutoAdvance;
+  const onTimeUpdateRef = useRef(onTimeUpdate);
   const pausedRef = useRef(paused);
+  onAdvanceRef.current = onAutoAdvance;
+  onTimeUpdateRef.current = onTimeUpdate;
   pausedRef.current = paused;
 
-  // Pause / resume the live audio element whenever the flag flips.
-  // We don't re-create the element — just pause it so resuming
-  // continues from the same position.
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (paused) {
-      a.pause();
-    } else {
-      a.play().catch(() => {
-        /* autoplay may be blocked — AutoStartGate handles user-gesture */
-      });
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (paused) audio.pause();
+    else audio.play().catch(() => undefined);
   }, [paused]);
 
   useEffect(() => {
-    const prev = audioRef.current;
-    if (prev) {
-      prev.pause();
-      prev.removeAttribute("src");
-      prev.load();
+    const previous = audioRef.current;
+    if (previous) {
+      previous.pause();
+      previous.removeAttribute("src");
+      previous.load();
       audioRef.current = null;
     }
+    onTimeUpdateRef.current?.(0);
 
-    if (mode === "manual") return;
-    if (mode === "auto" && !autoStarted) return;
+    if (mode === "manual" || (mode === "auto" && !autoStarted)) return;
 
     let advanced = false;
-    let timer: number | null = null;
-
-    const advanceAfter = (ms: number) => {
-      if (mode !== "auto" || advanced) return;
-      if (pausedRef.current) return; // honor pause
+    let timer: number | undefined;
+    const advanceAfter = (delayMs: number) => {
+      if (mode !== "auto" || advanced || pausedRef.current) return;
       timer = window.setTimeout(() => {
         if (advanced || pausedRef.current) return;
         advanced = true;
         onAdvanceRef.current();
-      }, Math.max(0, ms));
+      }, delayMs);
     };
 
-    if (src) {
-      const audio = new Audio(src);
-      audioRef.current = audio;
-      audio.preload = "auto";
+    if (!src) {
+      if (mode === "auto") advanceAfter(estimateFallbackMs);
+      return () => {
+        if (timer !== undefined) window.clearTimeout(timer);
+      };
+    }
 
-      audio.addEventListener("ended", () => advanceAfter(trailMs));
-      audio.addEventListener("error", () => {
-        // Audio file missing or undecodable — fall back to estimate.
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    audioRef.current = audio;
+    const onEnded = () => advanceAfter(trailMs);
+    const onError = () => advanceAfter(estimateFallbackMs);
+    const onTimeUpdate = () => onTimeUpdateRef.current?.(audio.currentTime * 1000);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+    audio.addEventListener("timeupdate", onTimeUpdate);
+
+    if (!pausedRef.current) {
+      audio.play().catch(() => {
         if (mode === "auto") advanceAfter(estimateFallbackMs);
       });
-
-      if (!pausedRef.current) {
-        audio.play().catch((err) => {
-          // Autoplay blocked (rare, AutoStartGate should prevent this) or
-          // file missing — fall back to estimate in auto mode.
-          console.warn("audio play failed:", err);
-          if (mode === "auto") advanceAfter(estimateFallbackMs);
-        });
-      }
-    } else if (mode === "auto") {
-      // No audio for this step (silent / empty narration) — use estimate.
-      advanceAfter(estimateFallbackMs);
     }
 
     return () => {
       advanced = true;
-      if (timer != null) clearTimeout(timer);
-      const a = audioRef.current;
-      if (a) {
-        a.pause();
-        a.removeAttribute("src");
-        a.load();
-        audioRef.current = null;
-      }
+      if (timer !== undefined) window.clearTimeout(timer);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      if (audioRef.current === audio) audioRef.current = null;
     };
-  }, [src, mode, trailMs, estimateFallbackMs, autoStarted]);
+  }, [src, mode, autoStarted, trailMs, estimateFallbackMs]);
 }
